@@ -1,0 +1,11 @@
+//llschemer source file (test1)
+
+(define x 1)
+(define y "abc")
+(define double (lambda (x) (+ x x)))
+(define square (lambda (n) (* n n)))
+(define g (lambda (x y) (- x y)))
+(define f (lambda (x y) (if (< x y) 1 2)))
+(+ 1 x)
+(* x x)
+

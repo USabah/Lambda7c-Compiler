@@ -1,0 +1,160 @@
+# Unambiguous LL(1) Grammar for lambda7c
+
+!type expr =
+!  | Integer of int
+!  | Floatpt of float
+!  | Strlit of string
+!  | Var of string
+!  | TypedVar of lltype*string
+!  | Nil
+!  | Binop of string*expr*expr
+!  | Uniop of string*expr
+!  | Ifelse of expr*expr*expr
+!  | Whileloop of expr*expr
+!  | Define of LBox<string>*expr
+!  | TypedDefine of LBox<lltype*string>*expr
+!  | Lambda of (string list)*expr
+!  | TypedLambda of ((lltype*string) list)*lltype*expr
+!  | Let of LBox<string>*expr*LBox<expr>
+!  | TypedLet of LBox<lltype*string>*expr*LBox<expr>
+!  | Quote of expr               // may not need for now
+!  | Setq of LBox<string>*expr   // destructive assignment
+!  | Sequence of LBox<expr> list  // includes function application (f x y z)
+!  // may want to change above for a more standard case for function application:
+!  // | Apply of expr*(expr list)
+!  | Beginseq of LBox<expr> list  // sequence of expressions
+!  // type expressions  
+!  | TypeExpr of lltype
+!  | Typedval of (lltype*expr)
+!  | Label of string   // not a proper expression - just a temporary
+!  | Error
+!  //  | Continuation of (expr -> expr)    // don't need
+!
+!and lltype =  // abstract syntax for type expressions
+!  | LLint | LLfloat | LLstring
+!  | LList of lltype | LLtuple of lltype list
+!  | LLfun of (lltype list)*lltype
+!  | LLunknown | LLuntypable | LLvar of string | LLunit
+
+valuetype expr list
+nonterminal Expr expr
+nonterminal Seq expr
+nonterminal Binop expr
+nonterminal Uniop expr
+nonterminal Axpr expr
+nonterminal Typeopt expr
+nonterminal Txpr expr
+nonterminal VarTypeopt expr
+
+nonterminal Strlist string list
+nonterminal Seq LBox<expr> list
+nonterminal AxprList expr list
+terminals int float string = + - * / % ^ 
+terminals < > <= >= cons neq eq and or ~ car cdr
+terminals not display let define begin lambda
+terminals while setq if 
+lexterminal LPAREN (
+lexterminal RPAREN )
+lexterminal COLON :
+lexattribute custom NIL Nil
+valueterminal INT ~ int ~ Num ~ int 
+valueterminal FLOAT ~ float ~ Float ~ float
+valueterminal STRLIT ~ string ~ StrLit ~ (fun x -> x)
+valueterminal VAR ~ string ~ Alphanum ~ (fun x -> x)
+
+
+topsym AxprList
+#COMMENT IF NOT GENERATING LEX
+AxprList --> { [] }
+
+#AxprList --> Axpr:a AxprList:al { let l = List.append [a] al; l }
+#AxprList --> { [] }
+#
+#Axpr --> LPAREN Expr:e RPAREN { e }  
+#Axpr --> INT:x { expr.Integer(x) }
+#Axpr --> FLOAT:x { expr.Floatpt(x) }
+#Axpr --> STRLIT:x { expr.Strlit(x) }
+#Axpr --> VAR:x { expr.Var(x) }
+#
+##Uniop and Binop
+#Expr --> NIL { expr.Nil }
+#Expr ==> Binop:b Axpr:e1 Axpr:e2 { 
+#    let strval = 
+#      match b with
+#        | Label(a) -> a
+#        | _ -> ""
+#    expr.Binop(strval, e1, e2) } <==
+#Expr ==> Uniop:b Axpr:e { 
+#    let strval = 
+#      match b with
+#        | Label(a) -> a
+#        | _ -> ""
+#    expr.Uniop(strval, e) } <==
+#
+#Binop --> +    { expr.Label("+") } 
+#Binop --> -    { expr.Label("-") } 
+#Binop --> *    { expr.Label("*") } 
+#Binop --> /    { expr.Label("/") } 
+#Binop --> %    { expr.Label("%") } 
+#Binop --> ^    { expr.Label("^") } 
+#Binop --> =    { expr.Label("=") } 
+#Binop --> <    { expr.Label("<") } 
+#Binop --> >    { expr.Label(">") }
+#Binop --> <=   { expr.Label("<=") } 
+#Binop --> >=   { expr.Label(">=") } 
+#Binop --> cons { expr.Label("cons") }
+#Binop --> neq  { expr.Label("neq") } 
+#Binop --> eq   { expr.Label("eq") } 
+#Binop --> and  { expr.Label("and") }
+#Binop --> or   { expr.Label("or") }
+#
+#Uniop --> ~       { expr.Label("~") }
+#Uniop --> car     { expr.Label("car") }
+#Uniop --> cdr     { expr.Label("cdr") }
+#Uniop --> not     { expr.Label("not") }
+#Uniop --> display { expr.Label("display") } 
+#
+##Ifelse, Whileloop, Define, Lambda 
+#
+#Expr --> if LPAREN Axpr:e1 Axpr:e2 Axpr:e3 RPAREN { expr.Ifelse(e1,e2,e3) }
+#Expr --> while Axpr:e1 Axpr:e2 { expr.Whileloop(e1,e2) } 
+#Expr ==> define VarTypeopt:[t] Axpr:e { 
+#    match t with
+#      | LBox(Var(s)) -> expr.Define(t, e)
+#      | _ -> expr.TypedDefine(t, e)
+#} <==
+#
+#Strlist ==> VarTypeopt:x Strlist:y { let l = List.append [x] y; l }
+#Strlist --> { [] }
+#Expr --> lambda LPAREN Strlist:s RPAREN Axpr:e { Lambda(s,e) }
+#
+##Let, Setq
+#
+#Txpr --> int { expr.TypeExpr(lltype.LLint) }
+#Txpr --> float { expr.TypeExpr(lltype.LLfloat) }
+#Txpr --> string { expr.TypeExpr(lltype.LLstring) }
+#Typeopt --> COLON Txpr:t { t }
+#Typeopt --> { expr.TypeExpr(lltype.LLunknown) } 
+#VarTypeopt ==> VAR:s Typeopt:t {
+#    match t with
+#      | TypeExpr(LLunknown) -> expr.Var(s)
+#      | TypeExpr(x) -> expr.TypedVar(x,s)
+#} <==
+#
+#Expr ==> let LPAREN VarTypeopt:[t] Axpr:e1 RPAREN Axpr:[e2] {
+#    match t with
+#      | LBox(Var(s)) -> expr.Let(s, e1, e2)
+#      | _ -> expr.TypedLet(t, e1, e2)
+#} <==
+#
+#Expr --> setq VAR:[s] Axpr:e { expr.Setq(s,e) }
+#
+##Sequences
+#Seq --> Axpr:[e] Seq:b  { let l = List.append [e] b; l }
+#Seq --> { [] }
+#Expr --> begin Axpr:[e] Seq:b { let l = List.append [e] b; expr.BegSeq(l) }
+#Expr --> Seq:s { Seq(s) }
+#
+##
+#
+#EOF

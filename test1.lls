@@ -1,0 +1,8 @@
+//llschemer source file (test1)
+
+(define x 1)
+(define I (lambda (x) x))
+(define K (lambda (x) (lambda (y) x)))
+(define f (lambda (x y)
+   (if (< x y) 1 (let (z y) (+ x z)))))
+(+ 1 2)
