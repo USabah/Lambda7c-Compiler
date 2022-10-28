@@ -11,18 +11,18 @@ type expr =
   | Floatpt of float
   | Strlit of string
   | Var of string
-  | TypedVar of lltype*string
+  | TypedVar of lltype option*string
   | Nil
   | Binop of string*LBox<expr>*LBox<expr>
   | Uniop of string*LBox<expr>
   | Ifelse of LBox<expr>*LBox<expr>*LBox<expr>
   | Whileloop of LBox<expr>*LBox<expr>
-  | Define of LBox<string>*LBox<expr>
-  | TypedDefine of LBox<lltype*string>*LBox<expr>
-  | Lambda of (LBox<string> list)*LBox<expr>
-  | TypedLambda of (LBox<(lltype*string)> list)*lltype*LBox<expr>
-  | Let of LBox<string>*LBox<expr>*LBox<expr>
-  | TypedLet of LBox<lltype*string>*LBox<expr>*LBox<expr>
+  | Define of LBox<lltype option*string>*LBox<expr>
+  | TypedDefine of LBox<lltype option*string>*LBox<expr>
+  | Lambda of (LBox<lltype option*string> list)*LBox<expr>
+  | TypedLambda of (LBox<lltype option*string> list)*lltype*LBox<expr>
+  | Let of LBox<lltype option*string>*LBox<expr>*LBox<expr>
+  | TypedLet of LBox<lltype option*string>*LBox<expr>*LBox<expr>
   | Quote of expr               // may not need for now
   | Setq of LBox<string>*LBox<expr>   // destructive assignment
   | Sequence of LBox<expr> list  // includes function application (f x y z)
@@ -33,8 +33,7 @@ type expr =
   | TypeExpr of lltype
   | Typedval of (lltype*expr)
   | Label of string   // not a proper expression - just a temporary
-  | StrList of LBox<string> list //Intermediate Addition
-  | TypedStrList of LBox<(lltype*string)> list //Intermediate
+  | StrList of LBox<lltype option*string> list //Intermediate Addition
   | Error
   //  | Continuation of (expr -> expr)    // don't need
 
@@ -158,14 +157,14 @@ Gmr.production("Typeopt --> ", fun r -> TypeExpr(LLunknown))
 let semact4 (rhs:Vec<Stackitem<expr>>) =  
     match (rhs.[0].value, rhs.[1].value) with
       | (Var(a), TypeExpr(LLunknown)) -> Var(a)
-      | (Var(a), TypeExpr(x)) -> TypedVar(x,a)
+      | (Var(a), TypeExpr(x)) -> TypedVar(Some(x),a)
       | _ -> Error
 Gmr.production("VarTypeopt --> VAR Typeopt", semact4)
 
 let semact5 (rhs:Vec<Stackitem<expr>>) =  
     match (rhs.[1].value) with
       | Var(s) -> 
-          let varbox  = rhs.[1].tolbox(s) 
+          let varbox  = rhs.[1].tolbox((None,s)) 
           let exprbox = rhs.[2].tolbox(rhs.[2].value)
           Define(varbox, exprbox)
       | TypedVar(a,s) -> 
@@ -178,17 +177,17 @@ Gmr.production("Expr --> define VarTypeopt Axpr", semact5)
 let semact6 (rhs:Vec<Stackitem<expr>>) =  
   match (rhs.[0].value, rhs.[1].value) with
     | (Var(a), Nil) -> 
-      let varbox  = rhs.[0].tolbox(a) 
+      let varbox = rhs.[0].tolbox((None,a)) 
       StrList(varbox::[])
     | (TypedVar(a,b), Nil) -> 
-      let varbox  = rhs.[0].tolbox((a,b)) 
-      TypedStrList(varbox::[])
+      let varbox = rhs.[0].tolbox((a,b)) 
+      StrList(varbox::[])
     | (Var(a), StrList(l)) -> 
-      let varbox  = rhs.[0].tolbox(a) 
+      let varbox = rhs.[0].tolbox((None,a)) 
       StrList(varbox::l)
-    | (TypedVar(a,b), TypedStrList(l)) -> 
-      let varbox  = rhs.[0].tolbox((a,b)) 
-      TypedStrList(varbox::l)
+    | (TypedVar(a,b), StrList(l)) -> 
+      let varbox = rhs.[0].tolbox((a,b)) 
+      StrList(varbox::l)
     | _ -> Error
 Gmr.production("Sval --> ", fun r -> Nil)
 Gmr.production("Sval --> VarTypeopt Sval", semact6)
@@ -200,7 +199,7 @@ Gmr.production("Strlist --> VarTypeopt Sval", semact6)
 let semact7 (rhs:Vec<Stackitem<expr>>) =  
     match (rhs.[2].value) with
       | Var(s) -> 
-          let varbox = rhs.[2].tolbox(s) 
+          let varbox = rhs.[2].tolbox((None,s)) 
           let expr1box = rhs.[3].tolbox(rhs.[3].value)
           let expr2box = rhs.[5].tolbox(rhs.[5].value)
           Let(varbox, expr1box, expr2box)
@@ -239,10 +238,10 @@ Gmr.production("Expr --> begin Axpr Seq", semact9)
 
 let semact10 (rhs:Vec<Stackitem<expr>>) =  
   match (rhs.[2].value, rhs.[4].value) with
-    | (StrList(a), TypeExpr(LLunknown))-> 
+    | (StrList(a), TypeExpr(LLunknown)) -> 
       let exprbox = rhs.[5].tolbox(rhs.[5].value)
       Lambda(a, exprbox)
-    | (TypedStrList(a), TypeExpr(x)) -> 
+    | (StrList(a), TypeExpr(x))-> 
       let exprbox = rhs.[5].tolbox(rhs.[5].value)
       TypedLambda(a, x, exprbox)
     | _ -> Error
