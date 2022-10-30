@@ -29,6 +29,11 @@ type expr =
   // may want to change above for a more standard case for function application:
   // | Apply of expr*(expr list)
   | Beginseq of LBox<expr> list  // sequence of expressions
+  //Vector expressions
+  | Vector of LBox<expr> list  //[1 2 3]
+  | VectorMake of LBox<expr>*LBox<expr> //(vmake 0 4)
+  | VectorSetq of LBox<expr>*LBox<expr>*LBox<expr> //(vsetq  a 0 8)
+  | VectorGet of LBox<expr>*LBox<expr>  //(vget a 1)
   // type expressions  
   | TypeExpr of lltype
   | Typedval of (lltype*expr)
@@ -45,13 +50,15 @@ and lltype =  // abstract syntax for type expressions
 
 
 // 2. Create a skeleton grammar with ast type and starting nonterminal (E)
-let mutable Gmr = new_grammar<expr>("AxprList") 
+//let mutable Gmr = new_grammar<expr>("AxprList") 
+let mutable Gmr = new_grammar<expr>("Axprplus") 
 
 // 3. Define terminal and non-terminal symbols (lexer interface)
 let binops = ["+";"-";"*";"/";"%";"^";"=";"<";">";"<=";">=";"cons";"neq";"eq";"and";"or"]
 let uniops = ["~";"car";"cdr";"not";"display"]
 let keywords = ["NIL";"int";"unit";"float";"string";"unit";"let";"define";"begin";"lambda";"while";"setq";"if"] 
-let terminals = List.append (List.append keywords binops) uniops 
+let vecops = ["vmake";"vsetq";"vget"]
+let terminals = List.append (List.append (List.append keywords binops) uniops) vecops
 Gmr.terminals(terminals)
 // valueterminals must name a token type (Num) and a function to convert
 // the token text to a value of the ast type.
@@ -62,7 +69,10 @@ Gmr.valueterminal("VAR","Alphanum",fun s -> Var(string s))
 Gmr.lexterminal("COLON",":") // map terminal names to token forms
 Gmr.lexterminal("LPAREN","(") 
 Gmr.lexterminal("RPAREN",")") 
-Gmr.nonterminals(["VarTypeplus";"VarTypelist";"Expr";"Seq";"Binop";"Uniop";"Axpr";"Typeopt";"Txpr";"VarTypeopt";"Strlist";"Sval";"Seq"]);  // these are in addition to AxprList
+Gmr.lexterminal("LBRACK","[") 
+Gmr.lexterminal("RBRACK","]") 
+//Gmr.nonterminals(["Expr";"Seq";"Binop";"Uniop";"Axpr";"Axprplus";"Typeopt";"Txpr";"VarTypeopt";"Strlist";"Sval";"Seq"]);  // these are in addition to AxprList
+Gmr.nonterminals(["Expr";"Seq";"Binop";"Uniop";"Axpr";"AxprList";"Typeopt";"Txpr";"VarTypeopt";"Strlist";"Sval";"Seq"]);  // these are in addition to AxprList
 
 // 4. Create a lexical scanner for the language such as in the form of
 //    a .lex file.  We will just use the ready-made  ll1_lex.dll  here.
@@ -86,6 +96,32 @@ Gmr.production("Axpr --> FLOAT", fun r -> r.[0].value)
 Gmr.production("Axpr --> STRLIT", fun r -> r.[0].value)
 Gmr.production("Axpr --> VAR", fun r -> r.[0].value)
 Gmr.production("Axpr --> NIL", fun r -> Nil)
+
+Gmr.production("Axprplus --> Axpr AxprList", fun rhs -> 
+  match (rhs.[0].value, rhs.[1].value) with
+    | (a,Nil) -> let vbox = rhs.[0] in Sequence(vbox::[])
+    | (a,Sequence(l)) -> let vbox = rhs.[0] in Sequence(vbox::l)
+    | _ -> Error
+)
+
+//Vector Ops
+Gmr.production("Axpr --> LBRACK AxprList RBRACK", fun rhs -> 
+  match (rhs.[1].value) with
+    | Sequence(l) -> Vector(l)
+    | Nil -> Vector([])
+    | _ -> Error
+)
+
+Gmr.production("Expr --> vget Axpr Axpr", fun rhs -> 
+  VectorGet(rhs.[1], rhs.[2])
+)
+Gmr.production("Expr --> vsetq Axpr Axpr Axpr", fun rhs -> 
+  VectorSetq(rhs.[1], rhs.[2], rhs.[3])
+)
+Gmr.production("Expr --> vmake Axpr Axpr", fun rhs -> 
+  VectorMake(rhs.[1], rhs.[2])
+)
+
 
 //#Uniop and Binop
 
@@ -151,8 +187,14 @@ Gmr.production("Txpr --> int", fun r -> TypeExpr(LLint))
 Gmr.production("Txpr --> unit", fun r -> TypeExpr(LLunit))
 Gmr.production("Txpr --> float", fun r -> TypeExpr(LLfloat))
 Gmr.production("Txpr --> string", fun r -> TypeExpr(LLstring))
+Gmr.production("Txpr --> LBRACK Txpr RBRACK", fun rhs -> 
+  match rhs.[1].value with
+    | TypeExpr(t) -> TypeExpr(LList(t))
+    | _ -> Error
+)
 Gmr.production("Typeopt --> COLON Txpr", fun r -> r.[1].value)
 Gmr.production("Typeopt --> ", fun r -> TypeExpr(LLunknown))
+
 
 let semact4 (rhs:Vec<Stackitem<expr>>) =  
     match (rhs.[0].value, rhs.[1].value) with

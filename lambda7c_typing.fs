@@ -223,7 +223,8 @@ type SymbolTable =  // wrapping structure for symbol table frames
     match expression with 
       | Lbox(Integer(_)) -> LLint
       | Lbox(Floatpt(_)) -> LLfloat
-      | Lbox(Strlit(_)) -> LLstring
+      | Lbox(Strlit(_)) -> 
+        LLstring
       | Lbox(Nil) -> LLunit /////////confirm?
       | Lbox(Binop("+",a,b)) | Lbox(Binop("-",a,b)) | Lbox(Binop("*",a,b)) 
       | Lbox(Binop("/",a,b)) | Lbox(Binop("%",a,b)) ->
@@ -423,10 +424,10 @@ type SymbolTable =  // wrapping structure for symbol table frames
           LLuntypable
         else LLunit //since the loop may not run at all
       | Lbox(Beginseq(se)) | Lbox(Sequence(se)) ->
-        let mutable setype = LLint
+        let mutable setype = LLunknown
         let mutable breakloop = false
         let mutable i = 0
-        while not(breakloop) && i < se.Length-1 do
+        while not(breakloop) && i < se.Length do
           setype <- this.infer_type(se.[i])
           if not(grounded_type(setype)) then
             breakloop <- true
@@ -454,6 +455,76 @@ type SymbolTable =  // wrapping structure for symbol table frames
             LLuntypable
           else 
             vartype 
+      | Lbox(Vector(vl)) ->
+        let mutable etype = LLunknown
+        if vl.Length > 0 then
+          etype <- this.infer_type(vl.[0])
+          if etype=LLuntypable then
+            printfn "(%d,%d): TYPE ERROR: Could not infer type of expression for Vector"
+              vl.[0].line vl.[0].column
+            LLuntypable
+          else
+            let mutable itype = LLunknown
+            let mutable error = false
+            for i in 1..vl.Length-1 do
+              itype <- this.infer_type(vl.[i])
+              if itype <> etype then
+                error <- true
+            if error then 
+              printfn "(%d,%d): TYPE ERROR: All values in a vector must be of the same type. Types %A and %A were passed"
+                vl.[0].line vl.[0].column etype itype
+              LLuntypable
+            else LList(etype) ///////originally etype?
+        else LList(etype)
+      | Lbox(VectorSetq(v,i,e)) ->
+        let (itype,vtype,etype) = (this.infer_type(i), this.infer_type(v), this.infer_type(e))
+        if itype <> LLint then
+          printfn "(%d,%d): TYPE ERROR: Vectors are indexed by integers. Type %A was passed as an index"
+            i.line i.column itype
+          LLuntypable
+        else 
+          let rtype = 
+            match vtype with
+              | LList(atomic_type) -> atomic_type
+              | _ -> LLuntypable
+          if rtype = LLuntypable then
+            printfn "(%d,%d): TYPE ERROR: Cannot infer type of vector. Type %A was passed as an index"
+              v.line v.column vtype
+            LLuntypable
+          else
+            if etype <> rtype then
+              printfn "(%d,%d): TYPE ERROR: Type of assigned expression must be equal to the vector type. Type %A was passed"
+                e.line e.column etype
+              LLuntypable
+            else LLunit
+      | Lbox(VectorMake(e1,e2)) ->
+        let (e1type, e2type) = (this.infer_type(e1),this.infer_type(e2))
+        if e1type <> e2type then
+          printfn "(%d,%d): TYPE ERROR: vmake expects two arguments of the same type. Types %A and %A were passed"
+            expression.line expression.column e1type e2type
+          LLuntypable
+        else if e1type<>LLstring && not(numerical e1type) then
+          printfn "(%d,%d): TYPE ERROR: Vectors can only contain atomic types (int/string/float). Type %A was passed"
+            expression.line expression.column e1type
+          LLuntypable
+        else
+          LList(e1type)
+      | Lbox(VectorGet(v,i)) ->
+        let (itype,vtype) = (this.infer_type(i), this.infer_type(v))
+        if itype <> LLint then
+          printfn "(%d,%d): TYPE ERROR: Vectors are indexed by integers. Type %A was passed as an index"
+            i.line i.column itype
+          LLuntypable
+        else 
+          let rtype = 
+            match vtype with
+              | LList(atomic_type) -> atomic_type
+              | _ -> LLuntypable
+          if rtype = LLuntypable then
+            printfn "(%d,%d): TYPE ERROR: Cannot infer type of vector. Type %A was passed as an index"
+              v.line v.column vtype
+            LLuntypable
+          else rtype
       | _ -> 
         printfn "(%d,%d): TYPE ERROR: %A Expression is not currently supported"
           expression.line expression.column expression.value 
