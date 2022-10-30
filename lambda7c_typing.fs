@@ -27,7 +27,7 @@ let funtype = function
 
 type TableEntry =
   | SimpleDef of typeof:lltype * gindex:int * ast_rep:option<expr>
-  | LambdaDef of typeof:lltype *gindex:int * frame:table_frame * ast_rep:option<expr>
+  | LambdaDef of typeof:lltype * gindex:int * frame:table_frame * ast_rep:option<expr>
 and table_frame =
   {
     name : string;
@@ -56,6 +56,28 @@ type SymbolTable =  // wrapping structure for symbol table frames
       this.global_index
     else 0
 
+  member this.overwrite_entry(s:string, t:lltype, a:expr option) =
+    //check if entry exists, if not, add_entry will add it
+    let success = this.add_entry(s,t,a) 
+    if success = 0 then
+      //potential to skip entries since overwriting old gi
+      /////should we use the old global index?
+      this.global_index <- this.global_index + 1
+      this.current_frame.entries.[s] <- SimpleDef(t,this.global_index,a)
+      this.global_index
+    else this.global_index
+  
+  member this.overwrite_entry(s:string, t:lltype, a:expr option, frame:table_frame) =
+    //check if entry exists, if not, add_entry will add it
+    let success = this.add_entry(s,t,a) 
+    if success = 0 then
+      //potential to skip entries since overwriting old gi
+      /////should we use the old global index?
+      this.global_index <- this.global_index + 1
+      this.current_frame.entries.[s] <- LambdaDef(t,this.global_index,frame,a)
+      this.global_index
+    else this.global_index
+
   member this.push_frame(n,line,column) =
     let newframe =
       {
@@ -64,13 +86,11 @@ type SymbolTable =  // wrapping structure for symbol table frames
         parent_scope = Some(this.current_frame);
       }
     this.frame_hash.[(line,column)] <- newframe
-    this.current_frame = newframe
+    this.current_frame <- newframe
 
   member this.pop_frame() =
     this.current_frame.parent_scope |> map (fun p -> this.current_frame<-p)
 
-  //ADD MORE MEMBERS
- 
   member this.parent(f: table_frame option) =
     if f <> None then
       f |> get |> fun frame -> frame.parent_scope
@@ -115,6 +135,18 @@ type SymbolTable =  // wrapping structure for symbol table frames
           | SimpleDef(l,g,a) -> l
           | LambdaDef(l,g,f,a) -> l
     else LLuntypable
+  
+  member this.set_index(s:string, index:int) = 
+    let (frame,entry) = this.get_entry_frame(s, 0)
+    let mutable new_entry = None
+    if entry <> None && frame <> None then
+      entry |> get |> fun e -> 
+        new_entry <- 
+          match e with
+            | SimpleDef(l,g,a) -> Some(SimpleDef(l,index,a))
+            | LambdaDef(l,g,f,a) -> Some(LambdaDef(l,index,f,a))
+        this._update_entry(s, frame, new_entry)
+    else false
 
   member this.set_type(s:string, gi:int, ltype:lltype) = 
     let (frame,entry) = this.get_entry_frame(s, gi)
@@ -125,10 +157,10 @@ type SymbolTable =  // wrapping structure for symbol table frames
           match e with
             | SimpleDef(l,g,a) -> Some(SimpleDef(ltype,g,a))
             | LambdaDef(l,g,f,a) -> Some(LambdaDef(ltype,g,f,a))
-      this.update_entry(s, frame, new_entry)
+      this._update_entry(s, frame, new_entry)
     else false
   
-  member this.update_entry(s:string, frame:table_frame option, 
+  member this._update_entry(s:string, frame:table_frame option, 
     entry:TableEntry option) = 
     if frame <> None && entry <> None then
       frame |> get |> fun f -> 
@@ -136,6 +168,55 @@ type SymbolTable =  // wrapping structure for symbol table frames
           f.entries.set_Item(s,e)
       true
     else false
+
+  member this.check_tlambda (identifier:string,expression:LBox<expr>) = 
+    match expression with
+      | Lbox(TypedLambda(l,_,e)) | Lbox(Lambda(l,e)) ->
+        let mutable rt = LLunknown
+        match expression.value with
+          | TypedLambda(a,b,c) -> rt <- b
+          | _ -> ()
+        let exline = expression.line
+        let excol = expression.column
+        this.push_frame(identifier, exline, excol)
+        let mutable index = 0
+        let mutable error = false
+        let mutable llvec = Vec<lltype>()
+        for i in l do
+          match i.value with
+            | (None,v) -> 
+              index <- this.add_entry(v, LLunknown, Some(e.value)) 
+              llvec.Add(LLunknown)
+            | (Some(t),v) -> 
+              index <- this.add_entry(v, t, Some(e.value)) 
+              llvec.Add(t)
+          if index=0 then
+            printfn "(%d,%d): TYPE ERROR: Multiple function arguments passed were assigned the variable name %s"
+              e.line e.column (snd i.value)
+            error <- true
+        if not(error) then
+          let llist = Seq.toList llvec
+          let expected_type = LLfun(llist, rt)
+          let gi = this.add_entry(identifier, expected_type, Some(expression.value), this.current_frame)
+          if gi = 0 then
+            printfn "(%d,%d): TYPE ERROR: Function arguments were assigned the same name as the function calling it %s"
+              expression.line expression.column identifier
+            0
+          else 
+            let etype = this.infer_type(e)
+            if rt=etype || (rt=LLunknown && grounded_type(etype)) then
+              let success = this.set_type(identifier, 0, LLfun(llist, etype)) 
+              if not(success) then 0
+              else this.global_index 
+            else
+              printfn "(%d,%d): TYPE ERROR: Lambda expression must be a grounded type, type %A was passed"
+                e.line e.column etype
+              0
+        else 0
+      | _ -> 
+        printfn "PROGRAMMER ERROR"
+        0
+
 
   member this.infer_type (expression:LBox<expr>) = 
     //let (|Lbox|) (t:Stackitem<'AT>) =  Lbox(t.value);
@@ -169,7 +250,6 @@ type SymbolTable =  // wrapping structure for symbol table frames
           | LList(LLfloat) -> inner_type <- LLfloat
           | LList(LLstring) -> inner_type <- LLstring
           | _ -> inner_type <- LLuntypable
-
         if inner_type = LLuntypable then
           printfn "(%d,%d): TYPE ERROR: Operator expects type LList of atomic types, recieved type %A"
             b.line b.column btype
@@ -222,48 +302,108 @@ type SymbolTable =  // wrapping structure for symbol table frames
       | Lbox(Var(var)) -> 
         let ltype = this.get_type(var,0)
         if ltype = LLuntypable then
-          printfn "(%d,%d): TYPE ERROR: Type of variable %s cannot be inferred." 
+          printfn "(%d,%d): TYPE ERROR: Variable %s has not been defined." 
             expression.line expression.column var
           ltype
         else ltype 
-      
       | Lbox(Define(var,value)) ->
-        let valtype = this.infer_type(value)
-        if grounded_type(valtype) then
-          ///////////add entry
-          valtype
-        else
-          printfn "(%d,%d): TYPE ERROR: Type of expression %A cannot be inferred."
-            value.line value.column value.value
-          LLuntypable
-      | Lbox(Lambda(l,e)) ->
-        let mutable i = 1
-        let mutable breakloop = false
-        //Shouldn't need to infer type of a string...
-        let mutable ltype = this.infer_type(l.[0])
-        while i < l.Length && not(breakloop) do
-          ltype <- this.infer_type(l.[i])
-          if not(grounded_type(l.[i])) then ////////atomic type or grounded type?
-            breakloop <- true
-          i <- i + 1
-        if breakloop then
-          i <- i - 1
-          printfn "(%d,%d): TYPE ERROR: All types passed to a lambda expression must be grounded, %A was passed"
-            l.[i].line l.[i].column ltype
-          LLuntypable
-        else
-          let etype = this.infer_type(e)
-          if not(grounded_type(etype)) then
-            printfn "(%d,%d): TYPE ERROR: Lambda expression must be a grounded type, type %A was passed"
-              e.line e.column etype
+        let (_, identifier) = var.value
+        match value.value with
+          | TypedLambda(l,_,e) | Lambda(l,e) ->
+            let rt = 
+              match value.value with
+                | TypedLambda(_,r,_) -> r
+                | _ -> LLunknown
+            let index = this.check_tlambda(identifier,value)
+            this.pop_frame() |> ignore
+            if index = 0 then
+              LLuntypable
+            else 
+              let frame = this.frame_hash.[(value.line, value.column)]
+              let entry = frame.entries.[identifier]
+              let mutable inferred_type = LLunknown
+              let mutable gi = 0
+              match entry with
+                | LambdaDef(l,g,f,a) -> 
+                  inferred_type <- l
+                  gi <- g
+                | _ -> ()
+              let i = this.add_entry(identifier, inferred_type, Some(expression.value), frame)
+              //define should be able to overwrite previously defined entries
+              if i = 0 then
+                this.overwrite_entry(identifier, inferred_type, Some(expression.value), frame) |> ignore
+              let old_entry = this.get_entry(identifier, 0)
+              //Do we need to update global index? like this.gi -= 1
+              this.set_index(identifier, gi) |> ignore
+              printfn "(%d,%d) TEST: INFERRED TYPE %A FOR VARIABLE %s"
+                expression.line expression.column (this.get_type(identifier, 0)) identifier
+              this.get_type(identifier, 0) 
+          | _ -> 
+            let vtype = this.infer_type(value)
+            if grounded_type(vtype) then
+              let i = this.add_entry(identifier, vtype, Some(expression.value))
+              if i = 0 then
+                this.overwrite_entry(identifier, vtype, Some(expression.value)) |> ignore
+              printfn "(%d,%d) TEST: INFERRED TYPE %A FOR VARIABLE %s"
+                expression.line expression.column (this.get_type(identifier, 0)) identifier
+              this.get_type(identifier, 0)
+            else
+              printfn "(%d,%d): TYPE ERROR: Type of expression for variable %s cannot be inferred"
+                value.line value.column identifier
+              LLuntypable
+      | Lbox(TypedDefine(tvar, value)) ->
+          let (t,identifier) = tvar.value
+          let vtype = this.infer_type(value)
+          if vtype=t.Value then
+            let i = this.add_entry(identifier, vtype, Some(expression.value))
+            if i = 0 then
+              this.overwrite_entry(identifier, vtype, Some(expression.value)) |> ignore
+            this.get_type(identifier, 0)
+          else
+            printfn "(%d,%d): TYPE ERROR: Type of expression for variable %s cannot be inferred"
+              value.line value.column identifier
             LLuntypable
-          else etype
-
+      | Lbox(Let(var_tupl, value, e)) | Lbox(TypedLet(var_tupl, value, e)) -> 
+        let (t, identifier) = var_tupl.value
+        /////should lambda be allowed for let expressions
+        match value.value with
+          | Lambda(l,e) | TypedLambda(l,_,e) -> LLuntypable
+          //let 
+          | _ ->
+            let vtype = this.infer_type(value)
+            if not(grounded_type(vtype)) then
+              printfn "(%d,%d): TYPE ERROR: Value assigned to variable %s cannot be inferred"
+                value.line value.column identifier
+              LLuntypable
+            else
+              let exline = expression.line
+              let excol = expression.column
+              //push frame and add value entry
+              this.push_frame(identifier, exline, excol)
+              let index =
+                match t with
+                  | None -> this.add_entry(identifier, vtype, Some(e.value))
+                  | Some(ltype) -> 
+                    if ltype <> vtype then
+                      printfn "(%d,%d): TYPE ERROR: Variable %A has specified type %A which does not match inferred type %A"
+                        value.line value.column identifier ltype vtype 
+                      0
+                    else
+                      this.add_entry(identifier, vtype, Some(e.value))
+              let etype = this.infer_type(e)
+              this.pop_frame() |> ignore
+              if index = 0 then
+                LLuntypable
+              else if not(grounded_type(etype)) then
+                printfn "(%d,%d): TYPE ERROR: Let expression evaluated to type %A"
+                  e.line e.column etype
+                LLuntypable
+              else etype
       | Lbox(Ifelse(a,b,c)) ->
         let (atype,btype,ctype) = 
           (this.infer_type(a), this.infer_type(b), this.infer_type(c))
         if atype <> LLint then
-          printfn "(%d,%d): TYPE ERROR: Ifelse expression expected LLint as first argument, %A was passed."
+          printfn "(%d,%d): TYPE ERROR: Ifelse expression expected an integer as first argument, type %A was passed."
             a.line a.column atype
           LLuntypable
         else if btype <> ctype then
@@ -277,12 +417,11 @@ type SymbolTable =  // wrapping structure for symbol table frames
           printfn "(%d,%d): TYPE ERROR: Whileloop expression expected LLint as first argument, %A was passed."
             a.line a.column atype
           LLuntypable
-        if not(grounded_type(btype)) then
+        else if not(grounded_type(btype)) then
           printfn "(%d,%d): TYPE ERROR: All expressions in whileloop must be grounded, type %A was passed."
             b.line b.column btype
-        else btype
-
-      /////Should sequence return type of final expression?
+          LLuntypable
+        else LLunit //since the loop may not run at all
       | Lbox(Beginseq(se)) | Lbox(Sequence(se)) ->
         let mutable setype = LLint
         let mutable breakloop = false
@@ -297,7 +436,10 @@ type SymbolTable =  // wrapping structure for symbol table frames
           printfn "(%d,%d): TYPE ERROR: Expected all types to be grounded in sequence, recieved type %A"
             se.[i].line se.[i].column setype
           LLuntypable
-        else setype
+        else 
+          printfn "(%d,%d) TEST: INFERRED TYPE %A FOR Sequence"
+            expression.line expression.column setype 
+          setype
       | Lbox(Setq(var,value)) ->
         let vartype = this.get_type(var.value,0)
         if not(grounded_type(vartype)) then
@@ -310,7 +452,12 @@ type SymbolTable =  // wrapping structure for symbol table frames
             printfn "(%d,%d): TYPE ERROR: Value in assignment expected type %A but recieved type %A"
               value.line value.column vartype valtype
             LLuntypable
-          else vartype 
+          else 
+            vartype 
+      | _ -> 
+        printfn "(%d,%d): TYPE ERROR: %A Expression is not currently supported"
+          expression.line expression.column expression.value 
+        LLuntypable
 
 // global symbol table
 let mutable global_frame = // root frame
@@ -325,3 +472,5 @@ let symbol_table =
     global_index = 0;
     frame_hash = HashMap<(int*int),table_frame>();
   }
+
+

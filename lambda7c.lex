@@ -42,8 +42,10 @@ ALPHANUM=[A-Za-z_][A-Za-z0-9_]*
 <YYINITIAL> {NEWLINE}+ { line_char = yychar+yytext().Length; return null; }
 <YYINITIAL> {NONNEWLINE_WHITE_SPACE_CHAR}+ { return null; }
 <YYINITIAL> ")" { return new RawToken(")",yytext(),yyline,yychar-line_char,yychar); }
-<YYINITIAL> ":" { return new RawToken(":",yytext(),yyline,yychar-line_char,yychar); }
+<YYINITIAL> "[" { return new RawToken("[",yytext(),yyline,yychar-line_char,yychar); }
+<YYINITIAL> "]" { return new RawToken("]",yytext(),yyline,yychar-line_char,yychar); }
 <YYINITIAL> "(" { return new RawToken("(",yytext(),yyline,yychar-line_char,yychar); }
+<YYINITIAL> ":" { return new RawToken(":",yytext(),yyline,yychar-line_char,yychar); }
 <YYINITIAL> "int" { return new RawToken("int",yytext(),yyline,yychar-line_char,yychar); }
 <YYINITIAL> "float" { return new RawToken("float",yytext(),yyline,yychar-line_char,yychar); }
 <YYINITIAL> "string" { return new RawToken("string",yytext(),yyline,yychar-line_char,yychar); }
@@ -75,6 +77,9 @@ ALPHANUM=[A-Za-z_][A-Za-z0-9_]*
 <YYINITIAL> "while" { return new RawToken("while",yytext(),yyline,yychar-line_char,yychar); }
 <YYINITIAL> "setq" { return new RawToken("setq",yytext(),yyline,yychar-line_char,yychar); }
 <YYINITIAL> "if" { return new RawToken("if",yytext(),yyline,yychar-line_char,yychar); }
+<YYINITIAL> "vec_setq" { return new RawToken("vec_setq",yytext(),yyline,yychar-line_char,yychar); }
+<YYINITIAL> "vec_get" { return new RawToken("vec_get",yytext(),yyline,yychar-line_char,yychar); }
+<YYINITIAL> "vec_make" { return new RawToken("vec_make",yytext(),yyline,yychar-line_char,yychar); }
 <YYINITIAL> Nil { return new RawToken("NIL",yytext(),yyline,yychar-line_char,yychar); }
 
 <YYINITIAL> "//".*\n { line_char=yychar+yytext().Length; return null; }

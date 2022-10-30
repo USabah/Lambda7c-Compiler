@@ -53,9 +53,12 @@ terminals int float string = + - * / % ^
 terminals < > <= >= cons neq eq and or ~ car cdr
 terminals not display let define begin lambda
 terminals while setq if 
+terminals vec_setq vec_get vec_make
 lexterminal LPAREN (
 lexterminal RPAREN )
 lexterminal COLON :
+lexterminal LBRACK [
+lexterminal RBRACK ]
 lexattribute custom NIL Nil
 valueterminal INT ~ int ~ Num ~ int 
 valueterminal FLOAT ~ float ~ Float ~ float

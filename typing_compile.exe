@@ -1,0 +1,7 @@
+#!/bin/bash
+echo "
+Compiling lambda7c_typing.fs:"
+fsharpc lambda7c_typing.fs -a -r lambda7c_ast.dll 
+echo "
+Compiling lambda7c_main.fs:"
+fsharpc lambda7c_main.fs -r lambda7c_ast.dll -r lambda7c_typing.dll -r schemer_lex.dll
