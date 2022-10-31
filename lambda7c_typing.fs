@@ -245,7 +245,7 @@ type SymbolTable =  // wrapping structure for symbol table frames
           LLuntypable
       | Lbox(Binop("cons",a,b)) ->
         let (atype,btype) = (this.infer_type(a), this.infer_type(b))
-        let mutable inner_type = LLint
+        let mutable inner_type = LLunknown
         match btype with
           | LList(LLint) -> inner_type <- LLint
           | LList(LLfloat) -> inner_type <- LLfloat
@@ -336,8 +336,8 @@ type SymbolTable =  // wrapping structure for symbol table frames
               let old_entry = this.get_entry(identifier, 0)
               //Do we need to update global index? like this.gi -= 1
               this.set_index(identifier, gi) |> ignore
-              printfn "(%d,%d) TEST: INFERRED TYPE %A FOR VARIABLE %s"
-                expression.line expression.column (this.get_type(identifier, 0)) identifier
+              //printfn "(%d,%d) TEST: INFERRED TYPE %A FOR VARIABLE %s"
+                //expression.line expression.column (this.get_type(identifier, 0)) identifier
               this.get_type(identifier, 0) 
           | _ -> 
             let vtype = this.infer_type(value)
@@ -345,8 +345,8 @@ type SymbolTable =  // wrapping structure for symbol table frames
               let i = this.add_entry(identifier, vtype, Some(expression.value))
               if i = 0 then
                 this.overwrite_entry(identifier, vtype, Some(expression.value)) |> ignore
-              printfn "(%d,%d) TEST: INFERRED TYPE %A FOR VARIABLE %s"
-                expression.line expression.column (this.get_type(identifier, 0)) identifier
+              //printfn "(%d,%d) TEST: INFERRED TYPE %A FOR VARIABLE %s"
+                //expression.line expression.column (this.get_type(identifier, 0)) identifier
               this.get_type(identifier, 0)
             else
               printfn "(%d,%d): TYPE ERROR: Type of expression for variable %s cannot be inferred"
@@ -360,10 +360,27 @@ type SymbolTable =  // wrapping structure for symbol table frames
             if i = 0 then
               this.overwrite_entry(identifier, vtype, Some(expression.value)) |> ignore
             this.get_type(identifier, 0)
-          else
-            printfn "(%d,%d): TYPE ERROR: Type of expression for variable %s cannot be inferred"
-              value.line value.column identifier
-            LLuntypable
+          else 
+            //case where value is []
+            let inner_type = 
+              match t.Value with
+                | LList(x) -> x
+                | _ -> LLuntypable
+            if inner_type <> LLuntypable then
+              if vtype = LList(LLunknown) then
+                let i = this.add_entry(identifier, t.Value, Some(expression.value))
+                if i = 0 then
+                  this.overwrite_entry(identifier, t.Value, Some(expression.value)) |> ignore
+                this.get_type(identifier, 0)
+              else
+                printfn "(%d,%d): TYPE ERROR: Assigned type %A for variable %s does not match value type %A"
+                  value.line value.column vtype identifier (t.Value)
+                LLuntypable
+            else
+              printfn "(%d,%d): TYPE ERROR: Assigned type %A for variable %s does not match value type %A"
+                value.line value.column vtype identifier (t.Value) 
+              LLuntypable
+
       | Lbox(Let(var_tupl, value, e)) | Lbox(TypedLet(var_tupl, value, e)) -> 
         let (t, identifier) = var_tupl.value
         /////should lambda be allowed for let expressions
@@ -438,10 +455,10 @@ type SymbolTable =  // wrapping structure for symbol table frames
             se.[i].line se.[i].column setype
           LLuntypable
         else 
-          printfn "(%d,%d) TEST: INFERRED TYPE %A FOR Sequence"
-            expression.line expression.column setype 
+          //printfn "(%d,%d) TEST: INFERRED TYPE %A FOR Sequence"
+            //expression.line expression.column setype 
           setype
-      | Lbox(Setq(var,value)) ->
+      | Lbox(Setq(var,value)) -> /////should this return LLunit?
         let vartype = this.get_type(var.value,0)
         if not(grounded_type(vartype)) then
           printfn "(%d,%d): TYPE ERROR: Undeclared variable %s must be initialized before assignment"

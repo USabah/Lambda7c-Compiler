@@ -24,3 +24,4 @@
     (define pi "in the sky")
     (display (area x)))))
 (intelligence_test 51.0)
+([1])
