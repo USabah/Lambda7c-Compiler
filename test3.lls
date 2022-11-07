@@ -5,21 +5,22 @@
 (define x2:int 4)  // TypedDefine case in AST
 (define y "abc")
 (define square (lambda (n:int):int (* n n))) //TypedLambda (int -> int)
-(define double (lambda (x) (+ x x))) // better to also parse as TypedLambda
-(define g (lambda (x y) (- x y)))
-(define f (lambda (x y) (if (< x y) 1 2)))
+//(define double (lambda (x) (+ x x))) // better to also parse as TypedLambda
+//(define g (lambda (x y) (- x y)))
+//(define f (lambda (x y) (if (< x y) 1 2)))
 (let (z 3) (+ z z))   // Let
 (let (z:float 4.5) (+ z z))  // TypedLet
 (+ 1 x)               // Binop("+",Integer(1),Var("x"))
 (* x (+ 2 x))
-(f 5 7)              //  Sequence([f; 5; 7]) f,5,7 inside LBoxes
-(display (f 5 67))   //  Uniop("display", Sequence ...)
+//(f 5 7)              //  Sequence([f; 5; 7]) f,5,7 inside LBoxes
+(square 5)
+//(display (f 5 67))   //  Uniop("display", Sequence ...)
 (begin 3 "abc" 3.4)  //  Beginseq([3,..
 (while (< x 10) (begin  // Whileloop(Binop.., Beginseq..)
     (display x)         // Display AST case
     (setq x (+ 1 x))    // Setq case (destructive assignment)
     ))
-
+/*
 (define pi 3.1415927)
 (define area (lambda (radius) (* radius (* radius pi))))
 (define intelligence_test (lambda (x)
@@ -27,3 +28,4 @@
     (define pi "in the sky")
     (display (area x)))))
 (intelligence_test 51.0)
+*/

@@ -1,0 +1,4 @@
+//testing static scoping
+(define y 5)
+(define a (lambda (x:int) (y)))
+(define b (lambda (y:string) (a)))

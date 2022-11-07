@@ -33,6 +33,7 @@ and table_frame =
     name : string;
     entries:HashMap<string, TableEntry>;
     parent_scope:table_frame option;
+    mutable closure:SortedDictionary<string,(int*lltype)>;
   }
 
 type SymbolTable =  // wrapping structure for symbol table frames
@@ -41,7 +42,7 @@ type SymbolTable =  // wrapping structure for symbol table frames
      mutable global_index: int;
      frame_hash:HashMap<(int*int),table_frame>;
   }
-  
+
   member this.add_entry(s:string,t:lltype,a:expr option) = 
     if not(this.current_frame.entries.ContainsKey(s)) then
       this.global_index <- this.global_index + 1
@@ -84,24 +85,29 @@ type SymbolTable =  // wrapping structure for symbol table frames
         table_frame.name=n;
         entries=HashMap<string,TableEntry>();
         parent_scope = Some(this.current_frame);
+        closure = SortedDictionary<string,(int*lltype)>();
       }
     this.frame_hash.[(line,column)] <- newframe
     this.current_frame <- newframe
+
+  member this.set_closure(closure: SortedDictionary<string, (int*lltype)>, 
+                          f: table_frame) = 
+    f.closure <- closure
 
   member this.pop_frame() =
     this.current_frame.parent_scope |> map (fun p -> this.current_frame<-p)
 
   member this.parent(f: table_frame option) =
-    if f <> None then
-      f |> get |> fun frame -> frame.parent_scope
+    if isSome f then
+      f.Value |> fun frame -> frame.parent_scope
     else f
 
   member this.find_frame(s:string, gi:int) = 
     let mutable frame = Some(this.current_frame)
     let mutable found = false
-    while not(found) && frame <> None do
+    while not(found) && isSome frame do
       //Check current frame
-      found <- frame |> get |> fun f -> 
+      found <- frame.Value |> fun f -> 
         (f.entries.ContainsKey(s) && this.match_gi(f.entries.[s],gi))
       if not(found) then
         frame <- this.parent(frame)
@@ -117,20 +123,20 @@ type SymbolTable =  // wrapping structure for symbol table frames
 
   member this.get_entry(s:string, gi:int) = 
     let frame = this.find_frame(s,gi)
-    if frame <> None then
-      frame |> get |> fun f -> Some(f.entries.[s])
+    if isSome frame then
+      frame.Value |> fun f -> Some(f.entries.[s])
     else None 
   
   member this.get_entry_frame(s:string, gi:int) = 
     let frame = this.find_frame(s,gi)
-    if frame <> None then
-      frame |> get |> fun f -> (frame, Some(f.entries.[s]))
+    if isSome frame then
+      frame.Value |> fun f -> (frame, Some(f.entries.[s]))
     else (None,None)
 
   member this.get_type(s:string, gi:int) = 
     let entry = this.get_entry(s,gi)
-    if entry <> None then
-      entry |> get |> fun e ->
+    if isSome entry then
+      entry.Value |> fun e ->
         match e with
           | SimpleDef(l,g,a) -> l
           | LambdaDef(l,g,f,a) -> l
@@ -139,8 +145,8 @@ type SymbolTable =  // wrapping structure for symbol table frames
   member this.set_index(s:string, index:int) = 
     let (frame,entry) = this.get_entry_frame(s, 0)
     let mutable new_entry = None
-    if entry <> None && frame <> None then
-      entry |> get |> fun e -> 
+    if isSome entry && isSome frame then
+      entry.Value |> fun e -> 
         new_entry <- 
           match e with
             | SimpleDef(l,g,a) -> Some(SimpleDef(l,index,a))
@@ -151,8 +157,8 @@ type SymbolTable =  // wrapping structure for symbol table frames
   member this.set_type(s:string, gi:int, ltype:lltype) = 
     let (frame,entry) = this.get_entry_frame(s, gi)
     let mutable new_entry = None
-    if entry <> None then
-      entry |> get |> fun e -> 
+    if isSome entry then
+      entry.Value |> fun e -> 
         new_entry <- 
           match e with
             | SimpleDef(l,g,a) -> Some(SimpleDef(ltype,g,a))
@@ -162,12 +168,32 @@ type SymbolTable =  // wrapping structure for symbol table frames
   
   member this._update_entry(s:string, frame:table_frame option, 
     entry:TableEntry option) = 
-    if frame <> None && entry <> None then
-      frame |> get |> fun f -> 
-        entry |> get |> fun e ->
+    if isSome frame && isSome entry then
+      frame.Value |> fun f -> 
+        entry.Value |> fun e ->
           f.entries.set_Item(s,e)
       true
     else false
+
+  member this.find_closure() = 
+    let fvs = SortedDictionary<string,(int*lltype)>()
+    this._collect_freevars(fvs)
+    fvs
+  
+  member this._collect_freevars(fvs:SortedDictionary<string,(int*lltype)>) = 
+    let mutable current_frame = this.parent(Some(this.current_frame)) 
+    while isSome current_frame do
+      for entry in current_frame.Value.entries do
+        let (x,xentry) = (entry.Key, entry.Value)
+        let mutable gindex = 0
+        let t = 
+          match xentry with
+            | SimpleDef(lt,gi,_) -> gindex <- gi; lt 
+            | LambdaDef(lt,gi,_,_) -> gindex <- gi; lt
+        match t with
+          | LLfun(_,_) -> () //skip functions
+          | _ -> fvs.Add(x, (gindex, t)); ()
+      current_frame <- this.parent(current_frame)
 
   member this.check_tlambda (identifier:string,expression:LBox<expr>) = 
     match expression with
@@ -316,6 +342,11 @@ type SymbolTable =  // wrapping structure for symbol table frames
                 | TypedLambda(_,r,_) -> r
                 | _ -> LLunknown
             let index = this.check_tlambda(identifier,value)
+            //update closure
+            let fvs = this.find_closure() 
+            this.set_closure(fvs, this.current_frame)
+            printfn "TESTING: \nCLOSURE FOR variable %A: %A\n" 
+              identifier (this.current_frame.closure)
             this.pop_frame() |> ignore
             if index = 0 then
               LLuntypable
@@ -409,6 +440,11 @@ type SymbolTable =  // wrapping structure for symbol table frames
                     else
                       this.add_entry(identifier, vtype, Some(e.value))
               let etype = this.infer_type(e)
+              //update closure
+              let fvs = this.find_closure() 
+              this.set_closure(fvs, this.current_frame)
+              printfn "TESTING: \nCLOSURE FOR variable %A: %A\n" 
+                identifier (this.current_frame.closure)
               this.pop_frame() |> ignore
               if index = 0 then
                 LLuntypable
@@ -551,8 +587,9 @@ type SymbolTable =  // wrapping structure for symbol table frames
 let mutable global_frame = // root frame
   {
     table_frame.name = "global";
-    entries= HashMap<string,TableEntry>();
+    entries = HashMap<string,TableEntry>();
     parent_scope = None;
+    closure = SortedDictionary<string, (int*lltype)>(); 
   }
 let symbol_table =
   {

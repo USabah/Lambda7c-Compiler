@@ -1,4 +1,4 @@
 (define a:[int] [1 2 3])
 (vsetq a 0 8)  // a[0] = 8
 (vget a 1)     // a[1]
-(vmake 0.5 4)    // [0;4]
+(vmake 0 4)    // [0;4]
