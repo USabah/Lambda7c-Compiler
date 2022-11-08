@@ -306,6 +306,52 @@ type LLVMprogram =
       | Some(i) -> ", align " + string(i)
       | None -> ""
 
+  member this._philist_string(conslist:Conslist<(LLVMexpr*string)>) = 
+    let mutable str = ""
+    let mutable expr1 = Novalue
+    let mutable bblock = ""
+    let last_index = conslist.Length - 1
+    let mutable i = 0
+    for tup in conslist do
+      expr1 <- fst tup
+      bblock <- snd tup
+      str <- str + "[" + this._expr_string(expr1) + ", %" + bblock + "]"
+      if i <> last_index then
+        str <- str + ", "
+      i <- i + 1
+    str
+
+  member this._opt_reg_string(s:Option<string>) = 
+    match s with
+      | Some(r) -> "%" + r + " = "
+      | None -> ""
+
+  member this._tlist_string(tlist:Conslist<LLVMtype) = 
+    let mutable str = "("
+    let last_index = conslist.Length - 1
+    let mutable i = 0
+    for t in conslist do
+      str <- str + this._type_string(t)
+      if i <> last_index then
+        str <- str + ", "
+      else str <- str + ")"
+      i <- i + 1
+    str
+
+  member this._arglist_string(tlist:Conslist<LLVMtype) = 
+    let mutable str = "("
+    let last_index = conslist.Length - 1
+    let mutable i = 0
+    for tup in conslist do
+      let t = fst tup
+      let dest_expr = snd tup
+      str <- str + this._type_string(t) + " " + this._expr_string(dest_expr)
+      if i <> last_index then
+        str <- str + ", "
+      else str <- str + ")"
+      i <- i + 1
+    str
+  
   member this._instruction_string(instruction:Instruction) = 
     let mutable str = ""
     match instruction with 
@@ -349,11 +395,21 @@ type LLVMprogram =
       | Phi2(reg, t, expr1, block1, expr2, block2) ->
         str <- "%" + reg + " = phi " + this._type_string(t) + "[" + this._expr_string(expr1) + ", %" + block1 + "], [" + this._expr_string(expr2) + ", %" + block2 + "]"
         str
-      (*
       | Phi(reg, t, conslist) ->
+        str <- "%" + reg + " = phi " + this._type_string(t) + this._philist_string(conslist)
+        str
       | Call(opt_reg, t, typelist, func_name, arglist) ->
+        str <- this._opt_reg_string(opt_reg) + "call " + this._type_string(t) + this._tlist_string(typelist) + " @" + this.func_name + this._arglist_string(arglist)
+        str
       | Arrayindex(reg, index, t, expr1, expr2) ->
+        let arrstring = "[" + string(index) + " x " + this._type_string(t) + "]"
+        str <- "%" + reg + " = getelementptr inbounds " + arrstring + ", " + arrstring + "* " + this._expr_string(expr1) + ", i64 0, i64 " + this._expr_string(expr2)
+        str
+      (*
+      //example and AST Definition are different for this....
       | Structfield(reg, t, expr1, expr2) ->
+        str <- "%" + reg + " = getelementptr inbounds %" + 
+        str
       *)
       | Verbatim(s) -> s
       | _ -> printfn "OPERATION NOT SUPPORTED: %A" instruction; ""
