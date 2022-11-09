@@ -1,5 +1,6 @@
 module lambda7c
 open System;
+open System.Collections.Generic;
 open Option;
 
 //may need to function to translate lltype -> LLVMtype
@@ -72,7 +73,7 @@ type Instruction =
   // memory ops: store i32 3, i32* %a, optional "align 4", type i32* is omitted
   | Load of string*LLVMtype*LLVMexpr*Option<string>
   | Store of LLVMtype*LLVMexpr*LLVMexpr*Option<string>  //pointer type omitted
-  | Alloca of string*LLVMtype*Option<int> // %r1 = alloca i64, align 8
+  | Alloca of string*LLVMtype*Option<string> // %r1 = alloca i64, align 8
   // ALU ops, always begins with a destination : %r1 = ...
   | Binaryop of string*string*LLVMtype*LLVMexpr*LLVMexpr
   | Unaryop of string*string*Option<string>*LLVMtype*LLVMexpr // fneg float %r1
@@ -120,7 +121,7 @@ The type 'i32*' is omitted since it is derivable from i32.  I don't think
 it's even possible to use another type.  The "align 4" is optional. The
 encoding of this instruction is
 
-Instruction.Load("r2",LLVMtype.Basic_t("i32"),LLVMexpr.Register("r1"),None)
+Instruction.Load("r2",LLVMtype.Basic("i32"),LLVMexpr.Register("r1"),None)
 
 Replace None with Some("align 4") if desired.
 
@@ -175,7 +176,7 @@ The other form of getelementptr encoded as an Instruction is
 
 This is encoded as
 
-  Structfield("r2",Usertype("bigstruct"),Register("r1"),Iconst(1))
+  Structfield("r2",Userstruct("bigstruct"),Register("r1"),Iconst(1))
 
 For example, given struct bigstruct { int x; char y; } b;  &b.y can be
 retrieved with this instruction.  Nested struct access (a.b.c) will require
@@ -206,11 +207,11 @@ Fcmp("r2","oeq",Basic("float"),Fconst(4.0),Register("r1")) :
 SelectTrue("r3",Basic("i32"),Register("r1"),Register("r2")) :
     %r3 = select i1 true, i32 %r1, i32 %r2 ;why would you select false
 Phi2("r2",Basic("i32"),Iconst(1),"block1",Register("r1"),"block2") :
-    %r2 = phi i32 [1, %block1], [%r1, "block2"]
+    %r2 = phi i32 [1, %block1], [%r1, %block2]
 Phi("3",Basic("i8"),[(Iconst(1),"bb1"),(Iconst(2),"bb2"),(Iconst(3),"bb3")] :
     %3 = phi i8 [1, %bb1], [2, %bb2], [3, %bb3] ;better to stick to Phi2
 Call(Some("r1"),Basic("i64"),"factorial",[(Basic("i8"),Iconst(8))])
-    %r1 = call i64 @factorial(i8 6)
+    %r1 = call i64 @factorial(i8 8)
 Verbatim("; comments start with ; so you can add ; to end of line")
     
 *)
@@ -248,16 +249,18 @@ type BasicBlock =
   {
      label: string;
      body: Vec<Instruction>; // last instruction must be a terminator
-     //predecessors : Vec<BasicBlock>; //control-flow graph, not used for now
+     predecessors: SortedSet<BasicBlock>; //control-flow graph, not used for now
+     ssamap: HashMap<string,string>; //current manifestation of each var
   }
 
 type LLVMFunction =
   {
      name: string;
-     formal_args : Vec<(LLVMtype*string)>;
-     return_type : LLVMtype;  // only basic and pointer types can be returned
+     formal_args: Vec<(LLVMtype*string)>;
+     return_type: LLVMtype;  // only basic and pointer types can be returned
      body: Vec<BasicBlock>;
-     attributes : Vec<string>; // like "dso_local", "#1", or ["","#1"]
+     attributes: Vec<string>; // like "dso_local", "#1", or ["","#1"]
+     bblocator: HashMap<string,int>; // index of BB in vector by label 
   }
 
 type LLVMprogram =
@@ -268,7 +271,7 @@ type LLVMprogram =
      postamble : string;  // stuff you don't want to know about
   }
 
-  member this.to_string(instruction:Instruction) = 
+  member this.to_string() = 
     let mutable pr_str = ""
     for func in this.functions do
       for bblock in func.body do
@@ -289,7 +292,10 @@ type LLVMprogram =
   member this._expr_string(expr:LLVMexpr) = 
     match expr with
       | Iconst(i) -> string(i)
-      | Fconst(f) -> string(f)
+      | Fconst(f) -> 
+        let s = string(f)
+        if s.Contains(".") then s
+        else s + ".0"
       | I1const(b) -> string(b).ToLower()
       | Sconst(s) | Label(s) -> s
       | Register(s) -> "%"+s 
@@ -326,23 +332,25 @@ type LLVMprogram =
       | Some(r) -> "%" + r + " = "
       | None -> ""
 
-  member this._tlist_string(tlist:Conslist<LLVMtype) = 
-    let mutable str = "("
-    let last_index = conslist.Length - 1
+  member this._tlist_string(tlist:Conslist<LLVMtype>) = 
+    let mutable str = " "
+    let last_index = tlist.Length - 1
+    if last_index >= 0 then str <- str + "("
     let mutable i = 0
-    for t in conslist do
+    for t in tlist do
       str <- str + this._type_string(t)
       if i <> last_index then
         str <- str + ", "
       else str <- str + ")"
       i <- i + 1
-    str
+    if str = " " then ""
+    else str
 
-  member this._arglist_string(tlist:Conslist<LLVMtype) = 
+  member this._arglist_string(arglist:Conslist<(LLVMtype*LLVMexpr)>) = 
     let mutable str = "("
-    let last_index = conslist.Length - 1
+    let last_index = arglist.Length - 1
     let mutable i = 0
-    for tup in conslist do
+    for tup in arglist do
       let t = fst tup
       let dest_expr = snd tup
       str <- str + this._type_string(t) + " " + this._expr_string(dest_expr)
@@ -385,32 +393,91 @@ type LLVMprogram =
       | Cast(new_reg, castop, from_t, orig_reg, to_t) ->
         str <- "%" + new_reg + " = " + castop + " " + this._type_string(from_t) + " " + this._expr_string(orig_reg) + " to " + this._type_string(to_t)
         str
-      | Icmp(res_reg, op, t, expr1, expr2) | Fcmp(res_reg, op, t, expr1, expr2) ->
-        str <- "%" + res_reg + " = " + op + " " + this._type_string(t) + " " + this._expr_string(expr1) + ", " + this._expr_string(expr2)
+      | Icmp(res_reg, op, t, expr1, expr2) ->
+        str <- "%" + res_reg + " = icmp " + op + " " + this._type_string(t) + " " + this._expr_string(expr1) + ", " + this._expr_string(expr2)
+        str
+      | Fcmp(res_reg, op, t, expr1, expr2) ->
+        str <- "%" + res_reg + " = fcmp " + op + " " + this._type_string(t) + " " + this._expr_string(expr1) + ", " + this._expr_string(expr2)
         str
       | SelectTrue(reg, t, expr1, expr2) ->
         let t_str = this._type_string(t)
         str <- "%" + reg + " = select i1 true, " + t_str + " " +  this._expr_string(expr1) + ", " + t_str + " " + this._expr_string(expr2)
         str
       | Phi2(reg, t, expr1, block1, expr2, block2) ->
-        str <- "%" + reg + " = phi " + this._type_string(t) + "[" + this._expr_string(expr1) + ", %" + block1 + "], [" + this._expr_string(expr2) + ", %" + block2 + "]"
+        str <- "%" + reg + " = phi " + this._type_string(t) + " [" + this._expr_string(expr1) + ", %" + block1 + "], [" + this._expr_string(expr2) + ", %" + block2 + "]"
         str
       | Phi(reg, t, conslist) ->
-        str <- "%" + reg + " = phi " + this._type_string(t) + this._philist_string(conslist)
+        str <- "%" + reg + " = phi " + this._type_string(t) + " " + this._philist_string(conslist)
         str
       | Call(opt_reg, t, typelist, func_name, arglist) ->
-        str <- this._opt_reg_string(opt_reg) + "call " + this._type_string(t) + this._tlist_string(typelist) + " @" + this.func_name + this._arglist_string(arglist)
+        str <- this._opt_reg_string(opt_reg) + "call " + this._type_string(t) + this._tlist_string(typelist) + " @" + func_name + this._arglist_string(arglist)
         str
       | Arrayindex(reg, index, t, expr1, expr2) ->
         let arrstring = "[" + string(index) + " x " + this._type_string(t) + "]"
         str <- "%" + reg + " = getelementptr inbounds " + arrstring + ", " + arrstring + "* " + this._expr_string(expr1) + ", i64 0, i64 " + this._expr_string(expr2)
         str
-      (*
-      //example and AST Definition are different for this....
       | Structfield(reg, t, expr1, expr2) ->
-        str <- "%" + reg + " = getelementptr inbounds %" + 
+        let t_str = this._type_string(t)
+        str <- "%" + reg + " = getelementptr inbounds %" + t_str + ", %" + t_str + "* " + this._expr_string(expr1) + " i32 0, i32 " + this._expr_string(expr2)
         str
-      *)
       | Verbatim(s) -> s
       | _ -> printfn "OPERATION NOT SUPPORTED: %A" instruction; ""
 
+//Test cases:
+let run_test = 
+  let llvmProgram =
+    {
+       LLVMprogram.preamble = ""; 
+       global_declarations = Vec<LLVMdeclaration>();
+       functions = Vec<LLVMFunction>();
+       postamble = "";
+    }
+  
+  let basicBlock =
+    {
+       BasicBlock.label = "";
+       body = Vec<Instruction>(); // last instruction must be a terminator
+       predecessors = SortedSet<BasicBlock>(); //control-flow graph, not used for now
+       ssamap = HashMap<string,string>(); //current manifestation of each var
+    }
+  
+  let llvmFunction =
+    {
+       LLVMFunction.name = "";
+       formal_args = Vec<(LLVMtype*string)>();
+       return_type = Void_t;  // only basic and pointer types can be returned
+       body = Vec<BasicBlock>();
+       attributes = Vec<string>(); // like "dso_local", "#1", or ["","#1"]
+       bblocator = HashMap<string,int>(); // index of BB in vector by label 
+    }
+  
+  llvmProgram.functions.Add(llvmFunction)
+  llvmFunction.body.Add(basicBlock)
+  
+  basicBlock.body.Add(Instruction.Bri1(LLVMexpr.Register("r1"), "label1", "label2"))
+  basicBlock.body.Add(Instruction.Load("r2",LLVMtype.Basic("i32"),LLVMexpr.Register("r1"),None)) 
+  basicBlock.body.Add(Instruction.Binaryop("r3","add",Basic("i32"),Register("r1"),Iconst(1))) 
+  basicBlock.body.Add(Call(Some("r2"),Basic("i32"),[],"func1",[(Pointer(Basic("i8")),Register("r1"));(Basic("double"),Fconst(1.0))])) 
+  basicBlock.body.Add(Call(None,Basic("i32"),[Pointer(Basic("i8"));Ellipsis],"printf",[(Pointer(Basic("i8")),Register("r2"));(Basic("i32"),Register("r1"))])) 
+  basicBlock.body.Add(Arrayindex("r2",9,Basic("i8"),Global("str1"),Iconst(0))) 
+  basicBlock.body.Add(Structfield("r2",Userstruct("bigstruct"),Register("r1"),Iconst(1))) 
+  basicBlock.body.Add(Instruction.Ret(LLVMtype.Basic("i32"),LLVMexpr.Register("r1"))) 
+  basicBlock.body.Add(Instruction.Ret_noval) 
+  basicBlock.body.Add(Instruction.Br_uc("loopstart")) 
+  basicBlock.body.Add(Instruction.Bri1(Register("r2"),"label1","label2")) 
+  basicBlock.body.Add(Instruction.Store(Basic("i8"),Iconst(1),Register("r1"),Some("align 1"))) 
+  basicBlock.body.Add(Instruction.Alloca("r1",Basic("i32"),Some("align 4"))) 
+  basicBlock.body.Add(Instruction.Unaryop("r2","fneg",None,Basic("float"),Register("r1"))) 
+  basicBlock.body.Add(Instruction.Cast("r2","bitcast",Pointer(Basic("i8")),Register("r1"),Pointer(Basic("i32")))) 
+  basicBlock.body.Add(Instruction.Icmp("r2","sle",Basic("i32"),Register("r1"),Iconst(1))) 
+  basicBlock.body.Add(Instruction.Fcmp("r2","oeq",Basic("float"),Fconst(4.0),Register("r1"))) 
+  basicBlock.body.Add(Instruction.SelectTrue("r3",Basic("i32"),Register("r1"),Register("r2"))) 
+  basicBlock.body.Add(Instruction.Phi2("r2",Basic("i32"),Iconst(1),"block1",Register("r1"),"block2")) 
+  basicBlock.body.Add(Instruction.Phi("3",Basic("i8"),[(Iconst(1),"bb1");(Iconst(2),"bb2");(Iconst(3),"bb3")])) 
+  basicBlock.body.Add(Instruction.Call(Some("r1"),Basic("i64"),[],"factorial",[(Basic("i8"),Iconst(8))])) 
+  basicBlock.body.Add(Instruction.Verbatim("; comments start with ; so you can add ; to end of line")) 
+  
+  
+  llvmProgram.to_string() |> ignore //for now
+
+run_test
