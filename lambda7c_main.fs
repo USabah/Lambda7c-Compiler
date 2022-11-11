@@ -6,7 +6,7 @@ open lambda7c
 open Recless.Base
 
 
-//fsharpc lambda7c_main.fs -r lambda7c_ast.dll -r lambda7c_typing.dll -r schemer_lex.dll
+//fsharpc lambda7c_main.fs -r lambda7c_ast.dll -r lambda7c_typing.dll -r schemer_lex.dll -r llvm_compiler.dll
 
 
 let runInteractive() = 

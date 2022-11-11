@@ -1,0 +1,7 @@
+echo "
+Compiling llvmir.fs:"
+fsharpc llvmir.fs -a -r lambda7c_typing.dll -r recless.dll 
+echo "
+Compiling llvm_compiler.fs:"
+fsharpc llvm_compiler.fs -r llvmir.dll -r lambda7c_typing.dll
+

@@ -1,10 +1,13 @@
 module lambda7c
+open lambda7c
+open Recless.Base
 open System;
 open System.Collections.Generic;
 open Option;
 
 //may need to function to translate lltype -> LLVMtype
 
+//fsharpc llvmir.fs -r lambda7c_typing.dll -r recless.dll 
 
 (* Abstract representation of Simplified LLVM IR:  (includes assignment)
 
@@ -61,7 +64,7 @@ type LLVMexpr =
   | I1const of bool  // booleans of type i1 are true and false
   | Register of string   // %r1
   | Global of string     // @str1
-  | Label of string      // not really used
+  // | Label of string      // not really used
   | Novalue     // default
 
 type Instruction =  
@@ -92,7 +95,16 @@ type Instruction =
   | Structfield of string*LLVMtype*LLVMexpr*LLVMexpr
   // other llvm instructions not covered by above must be encoded as:
   | Verbatim of string //generic "other" instruction, default case, comments
-  
+
+  member this.destination() =  
+    match this with
+      | Load(s,_,_,_) | Alloca(s,_,_) | Unaryop(s,_,_,_,_) -> Some(s)
+      | Binaryop(s,_,_,_,_) | Call(Some(s),_,_,_,_) -> Some(s)
+      | Cast(s,_,_,_,_) | Icmp(s,_,_,_,_) | Fcmp(s,_,_,_,_) -> Some(s)
+      | SelectTrue(s,_,_,_) | Phi2(s,_,_,_,_,_) | Phi(s,_,_) -> Some(s)
+      | Arrayindex(s,_,_,_,_) | Structfield(s,_,_,_) -> Some(s) 
+      | _ -> None  // includes case for Verbatim
+
   member this._type_string(t:LLVMtype) = 
     match t with
       | Basic(s) -> s
@@ -110,7 +122,7 @@ type Instruction =
         if s.Contains(".") then s
         else s + ".0"
       | I1const(b) -> string(b).ToLower()
-      | Sconst(s) | Label(s) -> s
+      | Sconst(s) -> s
       | Register(s) -> "%"+s 
       | Global(s) -> "@"+s
       | Novalue -> ""
@@ -360,6 +372,7 @@ Verbatim("; comments start with ; so you can add ; to end of line")
 *)
 
 // extracts the destination register from an instruction, returns string option
+(*
 let destination = function
   | Load(s,_,_,_) | Alloca(s,_,_) | Unaryop(s,_,_,_,_) -> Some(s)
   | Binaryop(s,_,_,_,_) | Call(Some(s),_,_,_,_) -> Some(s)
@@ -367,7 +380,7 @@ let destination = function
   | SelectTrue(s,_,_,_) | Phi2(s,_,_,_,_,_) | Phi(s,_,_) -> Some(s)
   | Arrayindex(s,_,_,_,_) | Structfield(s,_,_,_) -> Some(s) 
   | _ -> None  // includes case for Verbatim
-
+*)
 
 type LLVMdeclaration =
   | Globalconst of string*LLVMtype*LLVMexpr*Option<string>
@@ -396,6 +409,61 @@ type BasicBlock =
      ssamap: HashMap<string,string>; //current manifestation of each var
   }
 
+  member this.add(inst:Instruction) = 
+    this.body.Add(inst)
+
+  member this.append(v:Vec<Instruction>) = 
+    this.body.AddRange(v)
+
+  member this.last_dest() = 
+    if this.body.Count = 0 then None
+    else
+      this.body.[this.body.Count-1].destination() 
+
+  member this.add_predecessor(pred:BasicBlock) = 
+    this.predecessors.Add(pred)
+  
+let newBasicBlock(lb:string, pred:Vec<BasicBlock>) = 
+  let mutable preds = SortedSet<BasicBlock>()
+  for p in pred do
+    preds.Add(p) |> ignore
+  { 
+      BasicBlock.label=lb; 
+      body=Vec<Instruction>(); 
+      predecessors=preds; 
+      ssamap=HashMap<string,string>(); 
+  }
+
+let is_terminator(inst:Instruction) =
+  match inst with
+    | Br_uc(_) | Bri1(_,_,_) | Ret(_,_) | Ret_noval -> true
+    | _ -> false
+
+let is_float(t:LLVMtype) =
+  match t with
+    | Basic("double") -> true
+    | _ -> false 
+
+let oprep(expression:LBox<expr>, isfloat:bool) = 
+  match expression with
+    | Lbox(Binop(op,_,_)) ->
+      match op with
+        | "*" -> if isfloat then "fmul" else "mul"
+        | "/" -> if isfloat then "fdiv" else "sdiv"
+        | "+" -> if isfloat then "fadd" else "add"
+        | "-" -> if isfloat then "fsub" else "sub"
+        | "%" -> if isfloat then "frem" else "srem"
+        | "eq" | "=" -> if isfloat then "oeq" else "eq" 
+        | "neq" | "^" -> if isfloat then "one" else "ne" 
+        | "<" -> if isfloat then "olt" else "slt" 
+        | "<=" -> if isfloat then "ole" else "sle" 
+        | ">" -> if isfloat then "ogt" else "sgt" 
+        | ">=" -> if isfloat then "oge" else "sge" 
+        | "and" when not(isfloat) -> "and" 
+        | "or" when not(isfloat) -> "or" 
+        | _ -> "INVALID OP"
+    | _ -> "INVALID OP"
+
 type LLVMFunction =
   {
      name: string;
@@ -405,6 +473,51 @@ type LLVMFunction =
      attributes: Vec<string>; // like "dso_local", "#1", or ["","#1"]
      bblocator: HashMap<string,int>; // index of BB in vector by label 
   }
+ 
+  member this.addBB(bb:BasicBlock) = 
+    this.bblocator.Add(bb.label, bb.body.Count)
+    this.body.Add(bb) |> ignore
+
+  member this.currentBB(index:int) = 
+    let mutable need_new = false
+    if this.body.Count = 0 then need_new <- true
+    let last = this.body.Count - 1
+    if this.body.[last].body.Count > 0 then
+      let li = this.body.[last].body.Count - 1
+      if is_terminator(this.body.[last].body.[li]) then
+        need_new <- true
+    if need_new then
+      let new_label = sprintf "newBB_%d" index
+      let newBB = 
+        {
+          BasicBlock.label = new_label;
+          body = Vec<Instruction>(); // last instruction must be a terminator
+          predecessors = SortedSet<BasicBlock>(); //control-flow graph, not used for now
+          ssamap = HashMap<string,string>(); //current manifestation of each var
+        }
+      this.addBB(newBB)
+    last
+
+  member this.currentBBopt() = 
+    if this.body.Count = 0 then None
+    else
+      let last = this.body.Count - 1
+      if this.body.[last].body.Count > 0 then
+        let li = this.body.[last].body.Count - 1
+        if is_terminator(this.body.[last].body.[li]) then
+          None
+        else Some(this.body.[last])
+      else Some(this.body.[last])
+
+  member this.add_inst(inst:Instruction) = 
+    let lasti = this.currentBB(0)
+    this.body.[lasti].body.Add(inst) |> ignore
+
+  member this.currentBBlabel() = 
+    match (this.currentBBopt()) with
+      | Some(bb) -> bb.label
+      | None -> ""
+
 
 type LLVMprogram =
   {
@@ -412,6 +525,7 @@ type LLVMprogram =
      global_declarations : Vec<LLVMdeclaration>;
      functions: Vec<LLVMFunction>;
      postamble : string;  // stuff you don't want to know about
+     //strconsts:HashMap<string,string>;
   }
 
   member this.to_string() = 
@@ -424,24 +538,20 @@ type LLVMprogram =
     pr_str
 
 
+
+let newLLVMprogram(name:string) = 
+  {
+     LLVMprogram.preamble = name; 
+     global_declarations = Vec<LLVMdeclaration>();
+     functions = Vec<LLVMFunction>();
+     postamble = "";
+  }
+  
+
 //Test cases:
 let run_test = 
-  let llvmProgram =
-    {
-       LLVMprogram.preamble = ""; 
-       global_declarations = Vec<LLVMdeclaration>();
-       functions = Vec<LLVMFunction>();
-       postamble = "";
-    }
-  
-  let basicBlock =
-    {
-       BasicBlock.label = "";
-       body = Vec<Instruction>(); // last instruction must be a terminator
-       predecessors = SortedSet<BasicBlock>(); //control-flow graph, not used for now
-       ssamap = HashMap<string,string>(); //current manifestation of each var
-    }
-  
+  let llvmProgram = newLLVMprogram("")
+  let basicBlock = newBasicBlock("", Vec<BasicBlock>())
   let llvmFunction =
     {
        LLVMFunction.name = "";
