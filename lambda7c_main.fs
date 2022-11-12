@@ -31,8 +31,11 @@ if not(parser1.errors) then
   printfn "AST Representation------------" 
   printfn "%A" (result)
   
-  printfn "\n\n\nType Checker--------------------"
   //wrap result in an LBox
   let lbox = new_stackitem("AxprList", result, 1, 1)
-  let t = symbol_table.infer_type(lbox) 
+  let program_str = llvm_compiler.compile_program(lbox)
+  () //temp
+  (*let t = symbol_table.infer_type(lbox) 
+  printfn "\n\n\nType Checker--------------------"
   printfn "Type returned: %A" t
+  *)

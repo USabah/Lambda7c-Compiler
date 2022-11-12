@@ -496,7 +496,9 @@ type LLVMFunction =
           ssamap = HashMap<string,string>(); //current manifestation of each var
         }
       this.addBB(newBB)
-    last
+      newBB
+    else this.body.[last]
+    
 
   member this.currentBBopt() = 
     if this.body.Count = 0 then None
@@ -510,8 +512,8 @@ type LLVMFunction =
       else Some(this.body.[last])
 
   member this.add_inst(inst:Instruction) = 
-    let lasti = this.currentBB(0)
-    this.body.[lasti].body.Add(inst) |> ignore
+    let bb = this.currentBB(0)
+    bb.body.Add(inst) |> ignore
 
   member this.currentBBlabel() = 
     match (this.currentBBopt()) with
@@ -521,10 +523,10 @@ type LLVMFunction =
 
 type LLVMprogram =
   {
-     preamble : string;   // arbitrary stuff like target triple
+     mutable preamble : string;   // arbitrary stuff like target triple
      global_declarations : Vec<LLVMdeclaration>;
      functions: Vec<LLVMFunction>;
-     postamble : string;  // stuff you don't want to know about
+     mutable postamble : string;  // stuff you don't want to know about
      //strconsts:HashMap<string,string>;
   }
 

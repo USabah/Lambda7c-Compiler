@@ -416,8 +416,8 @@ type SymbolTable =  // wrapping structure for symbol table frames
         let (t, identifier) = var_tupl.value
         /////should lambda be allowed for let expressions
         match value.value with
-          | Lambda(l,e) | TypedLambda(l,_,e) -> LLuntypable
-          //let 
+          | Lambda(l,e) | TypedLambda(l,_,e) ->
+            LLuntypable
           | _ ->
             let vtype = this.infer_type(value)
             if not(grounded_type(vtype)) then
@@ -598,4 +598,18 @@ let symbol_table =
     frame_hash = HashMap<(int*int),table_frame>();
   }
 
-
+let makeSymbolTable = 
+  let mutable g_frame = // root frame
+    {
+      table_frame.name = "global";
+      entries = HashMap<string,TableEntry>();
+      parent_scope = None;
+      closure = SortedDictionary<string, (int*lltype)>(); 
+    }
+  let symb_table =
+    {
+      SymbolTable.current_frame=g_frame;
+      global_index = 0;
+      frame_hash = HashMap<(int*int),table_frame>();
+    }
+  symb_table
