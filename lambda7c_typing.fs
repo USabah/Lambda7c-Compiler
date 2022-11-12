@@ -59,25 +59,21 @@ type SymbolTable =  // wrapping structure for symbol table frames
 
   member this.overwrite_entry(s:string, t:lltype, a:expr option) =
     //check if entry exists, if not, add_entry will add it
-    let success = this.add_entry(s,t,a) 
-    if success = 0 then
-      //potential to skip entries since overwriting old gi
-      /////should we use the old global index?
-      this.global_index <- this.global_index + 1
-      this.current_frame.entries.[s] <- SimpleDef(t,this.global_index,a)
-      this.global_index
-    else this.global_index
+    if this.current_frame.entries.ContainsKey(s) then
+      //this.global_index <- this.global_index + 1
+      let (_,gi) = this.get_entry_index(s) 
+      this.current_frame.entries.[s] <- SimpleDef(t,gi,a)
+      gi
+    else 0 //entry doesn't exist
   
   member this.overwrite_entry(s:string, t:lltype, a:expr option, frame:table_frame) =
     //check if entry exists, if not, add_entry will add it
-    let success = this.add_entry(s,t,a) 
-    if success = 0 then
-      //potential to skip entries since overwriting old gi
-      /////should we use the old global index?
-      this.global_index <- this.global_index + 1
-      this.current_frame.entries.[s] <- LambdaDef(t,this.global_index,frame,a)
-      this.global_index
-    else this.global_index
+    if this.current_frame.entries.ContainsKey(s) then
+      //this.global_index <- this.global_index + 1
+      let (_,gi) = this.get_entry_index(s) 
+      this.current_frame.entries.[s] <- LambdaDef(t,gi,frame,a)
+      gi
+    else 0
 
   member this.push_frame(n,line,column) =
     let newframe =
@@ -126,7 +122,17 @@ type SymbolTable =  // wrapping structure for symbol table frames
     if isSome frame then
       frame.Value |> fun f -> Some(f.entries.[s])
     else None 
-  
+ 
+  member this.get_entry_index(s:string) = 
+    let frame = this.find_frame(s,0)
+    if isSome frame then
+      frame.Value |> 
+        fun f -> 
+          match f.entries.[s] with
+            | SimpleDef(_,g,_) -> (Some(f.entries.[s]), g)
+            | LambdaDef(_,g,_,_) -> (Some(f.entries.[s]), g)
+    else (None, 0)
+
   member this.get_entry_frame(s:string, gi:int) = 
     let frame = this.find_frame(s,gi)
     if isSome frame then
@@ -362,10 +368,10 @@ type SymbolTable =  // wrapping structure for symbol table frames
                 | _ -> ()
               let i = this.add_entry(identifier, inferred_type, Some(expression.value), frame)
               //define should be able to overwrite previously defined entries
-              if i = 0 then
+              if i = 0 then /////should we allow destructive assignment?
                 this.overwrite_entry(identifier, inferred_type, Some(expression.value), frame) |> ignore
               let old_entry = this.get_entry(identifier, 0)
-              //Do we need to update global index? like this.gi -= 1
+              /////Do we need to update global index? like this.gi -= 1
               this.set_index(identifier, gi) |> ignore
               //printfn "(%d,%d) TEST: INFERRED TYPE %A FOR VARIABLE %s"
                 //expression.line expression.column (this.get_type(identifier, 0)) identifier

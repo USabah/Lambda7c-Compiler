@@ -93,6 +93,8 @@ type Instruction =
   // simplified forms of getelementptr for array address and struct field
   | Arrayindex of string*int*LLVMtype*LLVMexpr*LLVMexpr
   | Structfield of string*LLVMtype*LLVMexpr*LLVMexpr
+  // BasicBlock instruction
+  | BBlock of string
   // other llvm instructions not covered by above must be encoded as:
   | Verbatim of string //generic "other" instruction, default case, comments
 
@@ -245,6 +247,7 @@ type Instruction =
         let t_str = this._type_string(t)
         str <- "%" + reg + " = getelementptr inbounds %" + t_str + ", %" + t_str + "* " + this._expr_string(expr1) + " i32 0, i32 " + this._expr_string(expr2)
         str
+      | BBlock(s) -> s + ":"
       | Verbatim(s) -> s
       | _ -> printfn "OPERATION NOT SUPPORTED: %A" this; ""
 
@@ -405,7 +408,7 @@ type BasicBlock =
   {
      label: string;
      body: Vec<Instruction>; // last instruction must be a terminator
-     predecessors: SortedSet<BasicBlock>; //control-flow graph, not used for now
+     predecessors: Vec<string>; //control-flow graph, not used for now
      ssamap: HashMap<string,string>; //current manifestation of each var
   }
 
@@ -420,17 +423,14 @@ type BasicBlock =
     else
       this.body.[this.body.Count-1].destination() 
 
-  member this.add_predecessor(pred:BasicBlock) = 
+  member this.add_predecessor(pred:string) = 
     this.predecessors.Add(pred)
   
-let newBasicBlock(lb:string, pred:Vec<BasicBlock>) = 
-  let mutable preds = SortedSet<BasicBlock>()
-  for p in pred do
-    preds.Add(p) |> ignore
+let newBasicBlock(lb:string, pred:Vec<string>) = 
   { 
       BasicBlock.label=lb; 
       body=Vec<Instruction>(); 
-      predecessors=preds; 
+      predecessors=pred; 
       ssamap=HashMap<string,string>(); 
   }
 
@@ -473,10 +473,12 @@ type LLVMFunction =
      attributes: Vec<string>; // like "dso_local", "#1", or ["","#1"]
      bblocator: HashMap<string,int>; // index of BB in vector by label 
   }
- 
+
+  /////should this add a BB instruction as well? 
   member this.addBB(bb:BasicBlock) = 
     this.bblocator.Add(bb.label, bb.body.Count)
     this.body.Add(bb) |> ignore
+    this.add_inst(BBlock(bb.label))
 
   member this.currentBB(index:int) = 
     let mutable need_new = false
@@ -492,7 +494,7 @@ type LLVMFunction =
         {
           BasicBlock.label = new_label;
           body = Vec<Instruction>(); // last instruction must be a terminator
-          predecessors = SortedSet<BasicBlock>(); //control-flow graph, not used for now
+          predecessors = Vec<string>(); //control-flow graph, not used for now
           ssamap = HashMap<string,string>(); //current manifestation of each var
         }
       this.addBB(newBB)
@@ -536,7 +538,6 @@ type LLVMprogram =
       for bblock in func.body do
         for instruction in bblock.body do
           pr_str <- pr_str + instruction.to_string() + "\n"
-    printfn "FINAL PROGRAM STRING -----------\n%s" pr_str
     pr_str
 
 
@@ -553,7 +554,7 @@ let newLLVMprogram(name:string) =
 //Test cases:
 let run_test = 
   let llvmProgram = newLLVMprogram("")
-  let basicBlock = newBasicBlock("", Vec<BasicBlock>())
+  let basicBlock = newBasicBlock("", Vec<string>())
   let llvmFunction =
     {
        LLVMFunction.name = "";

@@ -1,7 +1,11 @@
+#!/bin/bash
 echo "
 Compiling llvmir.fs:"
 fsharpc llvmir.fs -a -r lambda7c_typing.dll -r recless.dll 
 echo "
 Compiling llvm_compiler.fs:"
-fsharpc llvm_compiler.fs -r llvmir.dll -r lambda7c_typing.dll
+fsharpc llvm_compiler.fs -a -r llvmir.dll -r lambda7c_typing.dll
+echo "
+Compiling lambda7c_main.fs:"
+fsharpc lambda7c_main.fs -r lambda7c_ast.dll -r lambda7c_typing.dll -r schemer_lex.dll -r llvm_compiler.dll
 
