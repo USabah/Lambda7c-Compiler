@@ -175,11 +175,7 @@ type LLVMCompiler =
         let BBCond = newBasicBlock(label_cond, v_pred)
         func.addBB(BBCond)
         let cdest = this.compile_expr(cond, func)
-        //cdest will be of type i32, not i1 because of lambda7c booleans
-        //need to downcast cdest to an i1 before branch
-        let ccast = this.newid("r")
-        func.add_inst(Cast(ccast,"trunc",Basic("i32"),cdest,Basic("i1")))
-        let brinst = Bri1(Register(ccast), label_loop, label_endloop)
+        let brinst = Bri1(cdest, label_loop, label_endloop)
         let realabel_cond = func.currentBBlabel()
         let v_cond = Vec<string>()
         v_cond.Add(realabel_cond)
