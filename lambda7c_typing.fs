@@ -255,9 +255,8 @@ type SymbolTable =  // wrapping structure for symbol table frames
     match expression with 
       | Lbox(Integer(_)) -> LLint
       | Lbox(Floatpt(_)) -> LLfloat
-      | Lbox(Strlit(_)) -> 
-        LLstring
-      | Lbox(Nil) -> LLunit /////////confirm?
+      | Lbox(Strlit(_)) -> LLstring
+      | Lbox(Nil) -> LLunit 
       | Lbox(Binop("+",a,b)) | Lbox(Binop("-",a,b)) | Lbox(Binop("*",a,b)) 
       | Lbox(Binop("/",a,b)) | Lbox(Binop("%",a,b)) ->
         let (atype,btype) = (this.infer_type(a), this.infer_type(b))

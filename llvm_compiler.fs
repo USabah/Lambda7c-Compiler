@@ -32,18 +32,25 @@ type LLVMCompiler =
     match expr_t with
       | LLint -> Basic("i32")
       | LLfloat -> Basic("double")
-      //| LLstring -> 
+      ///| LLstring -> Array_t 
       //| LList(a) -> Arr
       | _ -> Void_t
 
   //member this.add_BB();;;; to see if lindex+=1 
+
 
   //returns the destination register of the expression (of type LLVMexpr)
   member this.compile_expr(expression:LBox<expr>, func:LLVMFunction) = 
     match expression with
       | Lbox(Integer(i)) -> Iconst(i)
       | Lbox(Floatpt(f)) -> Fconst(f)
-      /////| Lbox(Strlit(s)) -> 
+      (*| Lbox(Strlit(s)) ->
+        //calculate size of s, add necessary string stuff like \0a\00
+        let mutable str = s
+        let mutable str_size = str.Length
+        let  
+      *)
+
       | Lbox(Nil) -> Novalue
       | Lbox(Binop(op,a,b)) when List.contains op cmp_op ->
         let desta = this.compile_expr(a, func)

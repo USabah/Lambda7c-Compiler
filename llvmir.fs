@@ -45,6 +45,7 @@ You should return the string
   "%r2 = add i8 %r1, 1\n"
 *)
 
+//Definitions
 type Vec<'T> = ResizeArray<'T>
 type HashMap<'K,'V> = System.Collections.Generic.Dictionary<'K,'V>
 type Conslist<'K> = 'K list
@@ -66,6 +67,111 @@ type LLVMexpr =
   | Global of string     // @str1
   // | Label of string      // not really used
   | Novalue     // default
+
+//to_string helper functions
+let rec type_string(t:LLVMtype) = 
+  match t with
+    | Basic(s) -> s
+    | Pointer(t) -> type_string(t) + "*"
+    | Array_t(i,t) -> "[" + string(i) + " x "+ type_string(t) + "]"
+    | Userstruct(s) -> s /////double check this one
+    | Ellipsis -> "..."
+    | Void_t -> ""
+
+let expr_string(expr:LLVMexpr) = 
+  match expr with
+    | Iconst(i) -> string(i)
+    | Fconst(f) -> 
+      let s = string(f)
+      if s.Contains(".") then s
+      else s + ".0"
+    | I1const(b) -> string(b).ToLower()
+    | Sconst(s) -> s
+    | Register(s) -> "%"+s 
+    | Global(s) -> "@"+s
+    | Novalue -> ""
+
+let aopt_string(alignopt:Option<string>) = 
+  match alignopt with
+    | Some(s) -> ", " + s
+    | None -> ""
+  
+let philist_string(conslist:Conslist<(LLVMexpr*string)>) = 
+  let mutable str = ""
+  let mutable expr1 = Novalue
+  let mutable bblock = ""
+  let last_index = conslist.Length - 1
+  let mutable i = 0
+  for tup in conslist do
+    expr1 <- fst tup
+    bblock <- snd tup
+    str <- str + "[" + expr_string(expr1) + ", %" + bblock + "]"
+    if i <> last_index then
+      str <- str + ", "
+    i <- i + 1
+  str
+
+let opt_reg_string(s:Option<string>) = 
+  match s with
+    | Some(r) -> "%" + r + " = "
+    | None -> ""
+
+let tlist_string(tlist:Conslist<LLVMtype>) = 
+  let mutable str = " "
+  let last_index = tlist.Length - 1
+  if last_index >= 0 then str <- str + "("
+  let mutable i = 0
+  for t in tlist do
+    str <- str + type_string(t)
+    if i <> last_index then
+      str <- str + ", "
+    else str <- str + ")"
+    i <- i + 1
+  if str = " " then ""
+  else str
+
+let tlist_string2(tlist:Vec<LLVMtype>) = 
+  let mutable str = " "
+  let last_index = tlist.Count - 1
+  if last_index >= 0 then str <- str + "("
+  let mutable i = 0
+  for t in tlist do
+    str <- str + type_string(t)
+    if i <> last_index then
+      str <- str + ", "
+    else str <- str + ")"
+    i <- i + 1
+  if str = " " then ""
+  else str
+
+let arglist_string(arglist:Conslist<(LLVMtype*LLVMexpr)>) = 
+  let mutable str = "("
+  let last_index = arglist.Length - 1
+  let mutable i = 0
+  for tup in arglist do
+    let t = fst tup
+    let dest_expr = snd tup
+    str <- str + type_string(t) + " " + expr_string(dest_expr)
+    if i <> last_index then
+      str <- str + ", "
+    else str <- str + ")"
+    i <- i + 1
+  str
+
+/////need to come back to this eventually
+let structlist_string(vec:Vec<LLVMtype>) = 
+  let mutable str = "{ "
+  let last_index = vec.Count - 1
+  let mutable i = 0
+  for t in vec do
+    let t_str = type_string(t)
+    str <- str + t_str
+    if i <> last_index then
+      str <- str + ", "
+    else str <- str + " }"
+    i <- i + 1
+  str
+
 
 type Instruction =  
   // terminator instructions that ends a Basic Block:
@@ -106,148 +212,68 @@ type Instruction =
       | SelectTrue(s,_,_,_) | Phi2(s,_,_,_,_,_) | Phi(s,_,_) -> Some(s)
       | Arrayindex(s,_,_,_,_) | Structfield(s,_,_,_) -> Some(s) 
       | _ -> None  // includes case for Verbatim
-
-  member this._type_string(t:LLVMtype) = 
-    match t with
-      | Basic(s) -> s
-      | Pointer(t) -> this._type_string(t) + "*"
-      | Array_t(i,t) -> "[" + string(i) + this._type_string(t) + "]"
-      | Userstruct(s) -> s /////double check this one
-      | Ellipsis -> "..."
-      | Void_t -> ""
-
-  member this._expr_string(expr:LLVMexpr) = 
-    match expr with
-      | Iconst(i) -> string(i)
-      | Fconst(f) -> 
-        let s = string(f)
-        if s.Contains(".") then s
-        else s + ".0"
-      | I1const(b) -> string(b).ToLower()
-      | Sconst(s) -> s
-      | Register(s) -> "%"+s 
-      | Global(s) -> "@"+s
-      | Novalue -> ""
-
-  member this._aopt_string(alignopt:Option<string>) = 
-    match alignopt with
-      | Some(s) -> ", " + s
-      | None -> ""
-
-  member this._aopt_string(alignopt:Option<int>) = 
-    match alignopt with
-      | Some(i) -> ", align " + string(i)
-      | None -> ""
-
-  member this._philist_string(conslist:Conslist<(LLVMexpr*string)>) = 
-    let mutable str = ""
-    let mutable expr1 = Novalue
-    let mutable bblock = ""
-    let last_index = conslist.Length - 1
-    let mutable i = 0
-    for tup in conslist do
-      expr1 <- fst tup
-      bblock <- snd tup
-      str <- str + "[" + this._expr_string(expr1) + ", %" + bblock + "]"
-      if i <> last_index then
-        str <- str + ", "
-      i <- i + 1
-    str
-
-  member this._opt_reg_string(s:Option<string>) = 
-    match s with
-      | Some(r) -> "%" + r + " = "
-      | None -> ""
-
-  member this._tlist_string(tlist:Conslist<LLVMtype>) = 
-    let mutable str = " "
-    let last_index = tlist.Length - 1
-    if last_index >= 0 then str <- str + "("
-    let mutable i = 0
-    for t in tlist do
-      str <- str + this._type_string(t)
-      if i <> last_index then
-        str <- str + ", "
-      else str <- str + ")"
-      i <- i + 1
-    if str = " " then ""
-    else str
-
-  member this._arglist_string(arglist:Conslist<(LLVMtype*LLVMexpr)>) = 
-    let mutable str = "("
-    let last_index = arglist.Length - 1
-    let mutable i = 0
-    for tup in arglist do
-      let t = fst tup
-      let dest_expr = snd tup
-      str <- str + this._type_string(t) + " " + this._expr_string(dest_expr)
-      if i <> last_index then
-        str <- str + ", "
-      else str <- str + ")"
-      i <- i + 1
-    str
   
   member this.to_string() = 
     let mutable str = ""
     match this with 
       | Ret(t, expr) ->
-        str <- "ret " + this._type_string(t) + " " + this._expr_string(expr)
+        str <- "ret " + type_string(t) + " " + expr_string(expr)
         str
       | Ret_noval -> "ret"
       | Br_uc(s) ->
         str <- "br label %" + s 
         str
       | Bri1(expr, s1, s2) ->
-        str <- "br i1 " + this._expr_string(expr) + ", label %" + s1 + ", label %" + s2
+        str <- "br i1 " + expr_string(expr) + ", label %" + s1 + ", label %" + s2
         str
       | Load(reg, t, expr, alignopt) ->
-        let t_str = this._type_string(t)
-        str <- "%"+reg + " = load " + t_str + ", " + t_str + "* " + this._expr_string(expr) + this._aopt_string(alignopt)
+        let t_str = type_string(t)
+        str <- "%"+reg + " = load " + t_str + ", " + t_str + "* " + expr_string(expr) + aopt_string(alignopt)
         str
       | Store(t, expr1, expr2, alignopt) ->
-        let t_str = this._type_string(t)
-        str <- "store " + t_str + " " + this._expr_string(expr1) + ", " + t_str + "* " + this._expr_string(expr2) + this._aopt_string(alignopt)
+        let t_str = type_string(t)
+        str <- "store " + t_str + " " + expr_string(expr1) + ", " + t_str + "* " + expr_string(expr2) + aopt_string(alignopt)
         str
       | Alloca(reg, t, alignopt) ->
-        str <- "%" + reg + " = alloca " + this._type_string(t) + this._aopt_string(alignopt)
+        str <- "%" + reg + " = alloca " + type_string(t) + aopt_string(alignopt)
         str
       | Binaryop(reg, op, t, expr1, expr2) ->
-        str <- "%" + reg + " = " + op + " " + this._type_string(t) + " " + this._expr_string(expr1) + ", " + this._expr_string(expr2)
+        str <- "%" + reg + " = " + op + " " + type_string(t) + " " + expr_string(expr1) + ", " + expr_string(expr2)
         str
       | Unaryop(reg, op, None, t, expr) -> //only handling None case 
-        str <- "%" + reg + " = " + op + " " + this._type_string(t) + " " + this._expr_string(expr) 
+        str <- "%" + reg + " = " + op + " " + type_string(t) + " " + expr_string(expr) 
         str
       | Cast(new_reg, castop, from_t, orig_reg, to_t) ->
-        str <- "%" + new_reg + " = " + castop + " " + this._type_string(from_t) + " " + this._expr_string(orig_reg) + " to " + this._type_string(to_t)
+        str <- "%" + new_reg + " = " + castop + " " + type_string(from_t) + " " + expr_string(orig_reg) + " to " + type_string(to_t)
         str
       | Icmp(res_reg, op, t, expr1, expr2) ->
-        str <- "%" + res_reg + " = icmp " + op + " " + this._type_string(t) + " " + this._expr_string(expr1) + ", " + this._expr_string(expr2)
+        str <- "%" + res_reg + " = icmp " + op + " " + type_string(t) + " " + expr_string(expr1) + ", " + expr_string(expr2)
         str
       | Fcmp(res_reg, op, t, expr1, expr2) ->
-        str <- "%" + res_reg + " = fcmp " + op + " " + this._type_string(t) + " " + this._expr_string(expr1) + ", " + this._expr_string(expr2)
+        str <- "%" + res_reg + " = fcmp " + op + " " + type_string(t) + " " + expr_string(expr1) + ", " + expr_string(expr2)
         str
       | SelectTrue(reg, t, expr1, expr2) ->
-        let t_str = this._type_string(t)
-        str <- "%" + reg + " = select i1 true, " + t_str + " " +  this._expr_string(expr1) + ", " + t_str + " " + this._expr_string(expr2)
+        let t_str = type_string(t)
+        str <- "%" + reg + " = select i1 true, " + t_str + " " +  expr_string(expr1) + ", " + t_str + " " + expr_string(expr2)
         str
       | Phi2(reg, t, expr1, block1, expr2, block2) ->
-        str <- "%" + reg + " = phi " + this._type_string(t) + " [" + this._expr_string(expr1) + ", %" + block1 + "], [" + this._expr_string(expr2) + ", %" + block2 + "]"
+        str <- "%" + reg + " = phi " + type_string(t) + " [" + expr_string(expr1) + ", %" + block1 + "], [" + expr_string(expr2) + ", %" + block2 + "]"
         str
       | Phi(reg, t, conslist) ->
-        str <- "%" + reg + " = phi " + this._type_string(t) + " " + this._philist_string(conslist)
+        str <- "%" + reg + " = phi " + type_string(t) + " " + philist_string(conslist)
         str
       | Call(opt_reg, t, typelist, func_name, arglist) ->
-        str <- this._opt_reg_string(opt_reg) + "call " + this._type_string(t) + this._tlist_string(typelist) + " @" + func_name + this._arglist_string(arglist)
+        str <- opt_reg_string(opt_reg) + "call " + type_string(t) + tlist_string(typelist) + " @" + func_name + arglist_string(arglist)
         str
       | Arrayindex(reg, index, t, expr1, expr2) ->
-        let arrstring = "[" + string(index) + " x " + this._type_string(t) + "]"
-        str <- "%" + reg + " = getelementptr inbounds " + arrstring + ", " + arrstring + "* " + this._expr_string(expr1) + ", i64 0, i64 " + this._expr_string(expr2)
+        let arrstring = "[" + string(index) + " x " + type_string(t) + "]"
+        str <- "%" + reg + " = getelementptr inbounds " + arrstring + ", " + arrstring + "* " + expr_string(expr1) + ", i64 0, i64 " + expr_string(expr2)
         str
       | Structfield(reg, t, expr1, expr2) ->
-        let t_str = this._type_string(t)
-        str <- "%" + reg + " = getelementptr inbounds %" + t_str + ", %" + t_str + "* " + this._expr_string(expr1) + " i32 0, i32 " + this._expr_string(expr2)
+        let t_str = type_string(t)
+        str <- "%" + reg + " = getelementptr inbounds %" + t_str + ", %" + t_str + "* " + expr_string(expr1) + " i32 0, i32 " + expr_string(expr2)
         str
-      | BBlock(s) -> s + ":"
+      | BBlock(label) -> label + ":"
       | Verbatim(s) -> s
       | _ -> printfn "OPERATION NOT SUPPORTED: %A" this; ""
 
@@ -368,6 +394,8 @@ Phi2("r2",Basic("i32"),Iconst(1),"block1",Register("r1"),"block2") :
     %r2 = phi i32 [1, %block1], [%r1, %block2]
 Phi("3",Basic("i8"),[(Iconst(1),"bb1"),(Iconst(2),"bb2"),(Iconst(3),"bb3")] :
     %3 = phi i8 [1, %bb1], [2, %bb2], [3, %bb3] ;better to stick to Phi2
+BBlock("label") :
+    label:
 Call(Some("r1"),Basic("i64"),"factorial",[(Basic("i8"),Iconst(8))])
     %r1 = call i64 @factorial(i8 8)
 Verbatim("; comments start with ; so you can add ; to end of line")
@@ -390,6 +418,16 @@ type LLVMdeclaration =
   | Externfunc of LLVMtype*string*Vec<LLVMtype>
   | Structdec of string*Vec<LLVMtype>
   | Verbatim_dec of string // cases not covered by above
+  
+  member this.to_string() = 
+    match this with
+      | Globalconst(reg, t, str, alignopt) ->
+        sprintf "@%s = constant %s c\"%s\"%s" reg (type_string(t)) (expr_string(str)) (aopt_string(alignopt))
+      | Externfunc(t, func_name, tlist) ->
+        sprintf "declare %s @%s%s" (type_string(t)) func_name (tlist_string2(tlist))
+      | Structdec(struct_name, structlist) ->
+        sprintf "%struct.%s = type %s" "%s" struct_name (structlist_string(structlist))
+      | Verbatim_dec(s) -> s
 
 (*
    LLVM declarations are special cases of globally scoped instructions.
@@ -500,7 +538,6 @@ type LLVMFunction =
       this.addBB(newBB)
       newBB
     else this.body.[last]
-    
 
   member this.currentBBopt() = 
     if this.body.Count = 0 then None
@@ -522,7 +559,6 @@ type LLVMFunction =
       | Some(bb) -> bb.label
       | None -> ""
 
-
 type LLVMprogram =
   {
      mutable preamble : string;   // arbitrary stuff like target triple
@@ -532,14 +568,22 @@ type LLVMprogram =
      //strconsts:HashMap<string,string>;
   }
 
+  member this.addGD(decl:LLVMdeclaration) = 
+    this.global_declarations.Add(decl)
+  
+  member this.appendGD(vec:Vec<LLVMdeclaration>) = 
+    this.global_declarations.AddRange(vec)
+
   member this.to_string() = 
     let mutable pr_str = ""
+    pr_str <- pr_str + this.preamble + "\n"
+    for decl in this.global_declarations do
+      pr_str <- pr_str + decl.to_string() + "\n"
     for func in this.functions do
       for bblock in func.body do
         for instruction in bblock.body do
           pr_str <- pr_str + instruction.to_string() + "\n"
     pr_str
-
 
 
 let newLLVMprogram(name:string) = 
@@ -549,11 +593,22 @@ let newLLVMprogram(name:string) =
      functions = Vec<LLVMFunction>();
      postamble = "";
   }
-  
 
 //Test cases:
 let run_test = 
+  let v_dec = Vec<LLVMdeclaration>()
+  v_dec.Add(Globalconst("str1",Array_t(6,Basic("i8")),Sconst("hello\00"),Some("align 1")))
+  let v_types1 = Vec<LLVMtype>()
+  v_types1.Add(Pointer(Basic("i8")))
+  v_types1.Add(Ellipsis)
+  v_dec.Add(Externfunc(Basic("i32"),"printf",v_types1))
+  let v_types2 = Vec<LLVMtype>()
+  v_types2.Add(Basic("i32"))
+  v_types2.Add(Basic("i8"))
+  v_types2.Add(Basic("double"))
+  v_dec.Add(Structdec("bigstruct",v_types2))
   let llvmProgram = newLLVMprogram("")
+  llvmProgram.appendGD(v_dec)
   let basicBlock = newBasicBlock("", Vec<string>())
   let llvmFunction =
     {
@@ -590,8 +645,9 @@ let run_test =
   basicBlock.body.Add(Instruction.Phi("3",Basic("i8"),[(Iconst(1),"bb1");(Iconst(2),"bb2");(Iconst(3),"bb3")])) 
   basicBlock.body.Add(Instruction.Call(Some("r1"),Basic("i64"),[],"factorial",[(Basic("i8"),Iconst(8))])) 
   basicBlock.body.Add(Instruction.Verbatim("; comments start with ; so you can add ; to end of line")) 
+  basicBlock.body.Add(Instruction.BBlock("label")) 
   
-  
-  llvmProgram.to_string() |> ignore //for now
+  let str = llvmProgram.to_string() //for now
+  printfn "%s" str
 
 run_test
