@@ -27,12 +27,28 @@ type LLVMCompiler =
     this.lindex <- this.lindex + 1
     let new_id = sprintf "%s_%d" str (this.lindex)
     new_id
-
+  
+  member this.newgid(str:string) = 
+    this.gindex <- this.gindex + 1
+    let new_id = sprintf "%s_%d" str (this.gindex)
+    new_id
+  
+  member this.oldgid(str:string) = 
+    let old_id = sprintf "%s_%d" str (this.gindex)
+    old_id
+  
+  /////maybe add, str:Option<string>?????
   member this.translate_type(expr_t:lltype) =
     match expr_t with
       | LLint -> Basic("i32")
       | LLfloat -> Basic("double")
-      ///| LLstring -> Array_t 
+      | LLstring -> 
+        /////lookup string to get size within compile_expr
+        let strid = this.oldgid("str")
+
+        ////////incorrect, figure out how to store size correctly
+        let strsize = this.program.strsize.GetValueOrDefault(strid,0)
+        Array_t(strsize,Basic("i8")) 
       //| LList(a) -> Arr
       | _ -> Void_t
 
@@ -44,13 +60,28 @@ type LLVMCompiler =
     match expression with
       | Lbox(Integer(i)) -> Iconst(i)
       | Lbox(Floatpt(f)) -> Fconst(f)
-      (*| Lbox(Strlit(s)) ->
+      | Lbox(Strlit(s)) ->
         //calculate size of s, add necessary string stuff like \0a\00
         let mutable str = s
-        let mutable str_size = str.Length
-        let  
-      *)
-
+        let mutable strid = ""
+        let mutable str_size = str.Length - 1
+        str <- str.Replace("\\n","\\0a") 
+        let new_line_count = str.Split("\\n").Length - 1
+        str_size <- str_size - new_line_count
+        str <- str + "\\00"
+        str_size <- str_size + 1
+        if this.program.strconsts.ContainsKey(str) then
+          strid <- this.program.strconsts.[str]
+        else
+          strid <- this.newgid("str")
+          let decl = Globalconst(strid,Array_t(str_size,Basic("i8")),Sconst(str),None)
+          this.program.addGD(decl)
+          this.program.strsize.[strid] <- str_size
+          this.program.strconsts.Add(str, strid)
+        let reg = this.newid("r")
+        let arr_inst = Arrayindex(reg,str_size,Basic("i8"),Global(strid),Iconst(0))
+        func.add_inst(arr_inst)
+        Register(reg)
       | Lbox(Nil) -> Novalue
       | Lbox(Binop(op,a,b)) when List.contains op cmp_op ->
         let desta = this.compile_expr(a, func)
@@ -79,7 +110,29 @@ type LLVMCompiler =
             let new_op = oprep(expression, false)
             func.add_inst(Binaryop(r1,new_op,rtype,desta,destb))
         Register(r1)
-      //| Lbox(Uniop()) ->
+      | Lbox(Uniop("display", exp)) ->
+        let dest = this.compile_expr(exp, func)
+        let rtype = this.translate_type(this.symbol_table.infer_type(exp))
+        match rtype with
+          | Basic("i32") ->
+            let call_inst = Call(None,Void_t,[],"lambda7c_printint",[(Basic("i32"),dest)])
+            func.add_inst(call_inst)
+            Novalue
+          | Basic("double") ->
+            let call_inst = Call(None,Void_t,[],"lambda7c_printfloat",[(Basic("double"),dest)])
+            func.add_inst(call_inst)
+            Novalue
+          | Array_t(_, t) ->
+            ////this.newgid's most recent return the string we're printing?
+            let call_inst = Call(None,Void_t,[],"lambda7c_printstr",[(Pointer(t),dest)])
+            func.add_inst(call_inst)
+            Novalue
+          | _ -> 
+            printfn "(%d,%d): COMPILER ERROR: Expression is not yet supported by the compiler"
+              expression.line expression.column
+            this.errors <- true
+            Novalue
+        
       | Lbox(Ifelse(cond,tcase,fcase)) ->
         let cdest = this.compile_expr(cond, func)
         //cdest will be of type i32, not i1 because of lambda7c booleans
@@ -129,7 +182,8 @@ type LLVMCompiler =
             let phiinst = Phi2(fdest,desttype,dest1,realabel1,dest0,realabel0)
             func.add_inst(phiinst)
             Register(fdest)
-      | Lbox(Define(Lbox(_,var), value)) | Lbox(Setq(Lbox(var), value)) ->
+      | Lbox(Define(Lbox(_,var), value)) | Lbox(TypedDefine(Lbox(_,var), value))
+      | Lbox(Setq(Lbox(var), value)) ->
         let identifier = var
         let entryopt = this.symbol_table.get_entry(identifier,0)
         let var_entry = entryopt.Value
@@ -221,7 +275,7 @@ type LLVMCompiler =
       | LLuntypable -> "" //errors handled by typechecker
       | _ ->
         this.program.preamble <- sprintf "%s\n%s\n%s\n%s\n%s"
-          "target triple = \"x86_64-pc-linux-gnu\"; ... other stuff"
+          "target triple = \"x86_64-pc-linux-gnu\""
           "declare void @lambda7c_printint(i32)"
           "declare void @lambda7c_printfloat(double)"
           "declare void @lambda7c_printstr(i8*)"

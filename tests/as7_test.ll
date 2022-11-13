@@ -5,4 +5,4 @@
   (setq sum (+ sum i))
   (setq i (+ i 1))
   ))
-////(display sum)
+(display sum)

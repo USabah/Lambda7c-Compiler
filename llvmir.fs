@@ -76,7 +76,7 @@ let rec type_string(t:LLVMtype) =
     | Array_t(i,t) -> "[" + string(i) + " x "+ type_string(t) + "]"
     | Userstruct(s) -> s /////double check this one
     | Ellipsis -> "..."
-    | Void_t -> ""
+    | Void_t -> "void"
 
 let expr_string(expr:LLVMexpr) = 
   match expr with
@@ -565,7 +565,8 @@ type LLVMprogram =
      global_declarations : Vec<LLVMdeclaration>;
      functions: Vec<LLVMFunction>;
      mutable postamble : string;  // stuff you don't want to know about
-     //strconsts:HashMap<string,string>;
+     strconsts:HashMap<string,string>;
+     strsize:HashMap<string,int>;
   }
 
   member this.addGD(decl:LLVMdeclaration) = 
@@ -583,6 +584,7 @@ type LLVMprogram =
       for bblock in func.body do
         for instruction in bblock.body do
           pr_str <- pr_str + instruction.to_string() + "\n"
+    pr_str <- pr_str + this.postamble + "\n"
     pr_str
 
 
@@ -592,6 +594,8 @@ let newLLVMprogram(name:string) =
      global_declarations = Vec<LLVMdeclaration>();
      functions = Vec<LLVMFunction>();
      postamble = "";
+     strconsts = HashMap<string,string>();
+     strsize = HashMap<string,int>();
   }
 
 //Test cases:
