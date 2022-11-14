@@ -37,18 +37,16 @@ type LLVMCompiler =
     let old_id = sprintf "%s_%d" str (this.gindex)
     old_id
   
-  /////maybe add, str:Option<string>?????
-  member this.translate_type(expr_t:lltype) =
+  member this.translate_type(expr_t:lltype, strsize:Option<int>) =
     match expr_t with
       | LLint -> Basic("i32")
       | LLfloat -> Basic("double")
       | LLstring -> 
-        /////lookup string to get size within compile_expr
-        let strid = this.oldgid("str")
-
-        ////////incorrect, figure out how to store size correctly
-        let strsize = this.program.strsize.GetValueOrDefault(strid,0)
-        Array_t(strsize,Basic("i8")) 
+        if isSome strsize then
+          Array_t(strsize.Value,Basic("i8")) 
+        else
+          printfn "\n\n\nArray_t size was not passed!!!!!"
+          Void_t
       //| LList(a) -> Arr
       | _ -> Void_t
 
@@ -87,7 +85,7 @@ type LLVMCompiler =
         let desta = this.compile_expr(a, func)
         let destb = this.compile_expr(b, func)
         let r1 = this.newid("r")
-        let rtype = this.translate_type(this.symbol_table.infer_type(expression))
+        let rtype = this.translate_type(this.symbol_table.infer_type(expression), None)
         match rtype with
           | Basic("double") -> 
             let cmp_op = oprep(expression, true)
@@ -101,7 +99,7 @@ type LLVMCompiler =
         let desta = this.compile_expr(a, func)
         let destb = this.compile_expr(b, func)
         let r1 = this.newid("r")
-        let rtype = this.translate_type(this.symbol_table.infer_type(expression))
+        let rtype = this.translate_type(this.symbol_table.infer_type(expression), None)
         match rtype with
           | Basic("double") -> 
             let new_op = oprep(expression, true)
@@ -112,19 +110,21 @@ type LLVMCompiler =
         Register(r1)
       | Lbox(Uniop("display", exp)) ->
         let dest = this.compile_expr(exp, func)
-        let rtype = this.translate_type(this.symbol_table.infer_type(exp))
-        match rtype with
-          | Basic("i32") ->
+        let exptype = this.symbol_table.infer_type(exp)
+        match exptype with
+          | LLint -> //Basic("i32") 
             let call_inst = Call(None,Void_t,[],"lambda7c_printint",[(Basic("i32"),dest)])
             func.add_inst(call_inst)
             Novalue
-          | Basic("double") ->
+          | LLfloat-> // Basic("double") ->
             let call_inst = Call(None,Void_t,[],"lambda7c_printfloat",[(Basic("double"),dest)])
             func.add_inst(call_inst)
             Novalue
-          | Array_t(_, t) ->
+          | LLstring -> //Array_t
             ////this.newgid's most recent return the string we're printing?
-            let call_inst = Call(None,Void_t,[],"lambda7c_printstr",[(Pointer(t),dest)])
+            let strid = this.oldgid("str")
+            let strsize = this.program.strsize.[strid]
+            let call_inst = Call(None,Void_t,[],"lambda7c_printstr",[(Pointer(Basic("i8")),dest)])
             func.add_inst(call_inst)
             Novalue
           | _ -> 
@@ -174,7 +174,7 @@ type LLVMCompiler =
         let newBB = newBasicBlock(endif, v_endifBB)
         func.addBB(newBB)
         //check type of true branch (same as false branch)
-        let desttype = this.translate_type(this.symbol_table.infer_type(tcase))
+        let desttype = this.translate_type(this.symbol_table.infer_type(tcase), None)
         match desttype with
           | Void_t -> Novalue
           | _ -> 
@@ -192,8 +192,12 @@ type LLVMCompiler =
             | SimpleDef(l,g,_) -> (l,g)
             | LambdaDef(l,g,_,_) -> (l,g)
         let var_str = sprintf "%s_%d" identifier gindex
-        let desttype = this.translate_type(etype)
         let expr_dest = this.compile_expr(value, func)
+        let mutable desttype = Void_t 
+        if etype = LLstring then
+          desttype <- Pointer(Basic("i8"))
+        else 
+          desttype <- this.translate_type(etype, None)
         let already_allocated = this.allocated_vars.Contains(var_str)
         /////printfn "VAR_STR: %s" var_str //as of now, two defines of the same variable
         //which are in the same scope will use the newly assigned gindex
@@ -204,7 +208,7 @@ type LLVMCompiler =
         let storeinst = Store(desttype, expr_dest, Register(var_str), None)
         func.add_inst(storeinst)
         Register(var_str)
-      | Lbox(Var(x)) ->
+      |   Lbox(Var(x)) ->
         let entryopt = this.symbol_table.get_entry(x,0)
         let var_entry = entryopt.Value
         let (etype, gindex) = 
@@ -212,7 +216,11 @@ type LLVMCompiler =
             | SimpleDef(l,g,_) -> (l,g)
             | LambdaDef(l,g,_,_) -> (l,g)
         let var_str = sprintf "%s_%d" x gindex
-        let desttype = this.translate_type(etype)
+        let mutable desttype = Void_t
+        if etype = LLstring then
+          desttype <- Pointer(Basic("i8"))
+        else
+          desttype <- this.translate_type(etype, None)
         let reg = this.newid("r") /////not var_str
         let loadinst = Load(reg,desttype,Register(var_str),None)
         func.add_inst(loadinst)
@@ -272,7 +280,7 @@ type LLVMCompiler =
     let ptype = this.symbol_table.infer_type(mainexpr)
     printfn "Type returned: %A" ptype
     match ptype with
-      | LLuntypable -> "" //errors handled by typechecker
+      | LLuntypable -> None //errors handled by typechecker
       | _ ->
         this.program.preamble <- sprintf "%s\n%s\n%s\n%s\n%s"
           "target triple = \"x86_64-pc-linux-gnu\""
@@ -305,8 +313,8 @@ type LLVMCompiler =
           let pstr = this.program.to_string() //convert to string format (actual .ll form)
           printfn "\n\n\nCode Generation-----------------"
           printfn "%s" pstr
-          pstr
-        else ""
+          Some(pstr)
+        else None
 
 let new_skeleton(name:string) = 
   {

@@ -4,7 +4,7 @@ open System.IO
 open Fussless
 open lambda7c
 open Recless.Base
-
+open Option
 
 //fsharpc lambda7c_main.fs -r lambda7c_ast.dll -r lambda7c_typing.dll -r schemer_lex.dll -r llvm_compiler.dll
 
@@ -34,8 +34,7 @@ if not(parser1.errors) then
   //wrap result in an LBox
   let lbox = new_stackitem("AxprList", result, 1, 1)
   let program_str = llvm_compiler.compile_program(lbox)
-  () //temp
-  (*let t = symbol_table.infer_type(lbox) 
-  printfn "\n\n\nType Checker--------------------"
-  printfn "Type returned: %A" t
-  *)
+  if isSome program_str then
+    //write to test.ll
+    File.WriteAllText("test.ll", program_str.Value)
+

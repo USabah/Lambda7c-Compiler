@@ -580,13 +580,16 @@ type LLVMprogram =
     pr_str <- pr_str + this.preamble + "\n"
     for decl in this.global_declarations do
       pr_str <- pr_str + decl.to_string() + "\n"
+    ////////temporarily add main
+    pr_str <- pr_str + "define i32 @main(){\n"
     for func in this.functions do
       for bblock in func.body do
         for instruction in bblock.body do
           pr_str <- pr_str + instruction.to_string() + "\n"
-    pr_str <- pr_str + this.postamble + "\n"
+    pr_str <- pr_str + this.postamble 
+    ////////temporarily close main
+    pr_str <- pr_str + "}\n"
     pr_str
-
 
 let newLLVMprogram(name:string) = 
   {
