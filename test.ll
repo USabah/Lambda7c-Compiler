@@ -3,28 +3,28 @@ declare void @lambda7c_printint(i32)
 declare void @lambda7c_printfloat(double)
 declare void @lambda7c_printstr(i8*)
 declare void @lambda7c_newline(i8*)
+@str_1 = constant [5 x i8] c"true\00"
+@str_2 = constant [6 x i8] c"false\00"
 define i32 @main(){
 beginmain:
-%sum_1 = alloca i32
-store i32 0, i32* %sum_1
-%i_2 = alloca i32
-store i32 1, i32* %i_2
-br label %check_cond_1
-check_cond_1:
-%r_4 = load i32, i32* %i_2
-%r_5 = icmp sle i32 %r_4, 100
-br i1 %r_5, label %loop_2, label %endloop_3
-loop_2:
-%r_6 = load i32, i32* %sum_1
-%r_7 = load i32, i32* %i_2
-%r_8 = add i32 %r_6, %r_7
-store i32 %r_8, i32* %sum_1
-%r_9 = load i32, i32* %i_2
-%r_10 = add i32 %r_9, 1
-store i32 %r_10, i32* %i_2
-br label %check_cond_1
-endloop_3:
-%r_11 = load i32, i32* %sum_1
-call void @lambda7c_printint(i32 %r_11)
+%r_1 = trunc i32 1 to i1
+br i1 %r_1, label %iftrue_2, label %iffalse_3
+iftrue_2:
+br label %endif_4
+iffalse_3:
+br label %endif_4
+endif_4:
+%r_5 = phi i32 [0, %iftrue_2], [0, %iffalse_3]
+%r_6 = trunc i32 %r_5 to i1
+br i1 %r_6, label %iftrue_7, label %iffalse_8
+iftrue_7:
+%r_10 = getelementptr inbounds [5 x i8], [5 x i8]* @str_1, i64 0, i64 0
+call void @lambda7c_printstr(i8* %r_10)
+br label %endif_9
+iffalse_8:
+%r_11 = getelementptr inbounds [6 x i8], [6 x i8]* @str_2, i64 0, i64 0
+call void @lambda7c_printstr(i8* %r_11)
+br label %endif_9
+endif_9:
 ret i32 0
 }

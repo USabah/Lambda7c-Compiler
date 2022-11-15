@@ -10,6 +10,7 @@ open Option
 //fsharpc llvm_compiler.fs -r llvmir.dll
 
 let cmp_op = [">";">=";"eq";"=";"neq";"^";"<";"<="]
+let short_circuit_op = ["and";"&&";"or";"||"]
 
 //Compiler
 type LLVMCompiler =
@@ -62,10 +63,12 @@ type LLVMCompiler =
         //calculate size of s, add necessary string stuff like \0a\00
         let mutable str = s
         let mutable strid = ""
-        let mutable str_size = str.Length - 1
-        str <- str.Replace("\\n","\\0a") 
+        let mutable str_size = str.Length
+        printfn "str_size1: %d" str_size
         let new_line_count = str.Split("\\n").Length - 1
+        str <- str.Replace("\\n","\\0a") 
         str_size <- str_size - new_line_count
+        printfn "str_size2: %d" str_size
         str <- str + "\\00"
         str_size <- str_size + 1
         if this.program.strconsts.ContainsKey(str) then
@@ -95,6 +98,14 @@ type LLVMCompiler =
             func.add_inst(Icmp(r1,cmp_op,rtype,desta,destb))
         Register(r1)
       //| Lbox(Binop("cons",a,b)) ->
+      | Lbox(Binop("and",a,b)) | Lbox(Binop("&&",a,b)) ->
+          let sc_lbox = lbox("", Integer(0), expression.line, expression.column)
+          let ifelse_expr_box = lbox("", Ifelse(a,b,sc_lbox), expression.line, expression.column)
+          this.compile_expr(ifelse_expr_box, func) 
+      | Lbox(Binop("or",a,b)) | Lbox(Binop("||",a,b)) ->
+          let sc_lbox = lbox("", Integer(1), expression.line, expression.column)
+          let ifelse_expr_box = lbox("", Ifelse(a,sc_lbox,b), expression.line, expression.column)
+          this.compile_expr(ifelse_expr_box, func) 
       | Lbox(Binop(op,a,b)) ->
         let desta = this.compile_expr(a, func)
         let destb = this.compile_expr(b, func)
