@@ -64,11 +64,9 @@ type LLVMCompiler =
         let mutable str = s
         let mutable strid = ""
         let mutable str_size = str.Length
-        printfn "str_size1: %d" str_size
         let new_line_count = str.Split("\\n").Length - 1
         str <- str.Replace("\\n","\\0a") 
         str_size <- str_size - new_line_count
-        printfn "str_size2: %d" str_size
         str <- str + "\\00"
         str_size <- str_size + 1
         if this.program.strconsts.ContainsKey(str) then
@@ -96,7 +94,11 @@ type LLVMCompiler =
           | _ -> 
             let cmp_op = oprep(expression, false)
             func.add_inst(Icmp(r1,cmp_op,rtype,desta,destb))
-        Register(r1)
+        let r2 = this.newid("r")
+        //Need to convert to i32 since Ifelse and Whileloop assume that it's 
+        //an i32
+        func.add_inst(Cast(r2,"zext",Basic("i1"),Register(r1),Basic("i32")))
+        Register(r2)
       //| Lbox(Binop("cons",a,b)) ->
       | Lbox(Binop("and",a,b)) | Lbox(Binop("&&",a,b)) ->
           let sc_lbox = lbox("", Integer(0), expression.line, expression.column)
@@ -143,7 +145,6 @@ type LLVMCompiler =
               expression.line expression.column
             this.errors <- true
             Novalue
-        
       | Lbox(Ifelse(cond,tcase,fcase)) ->
         let cdest = this.compile_expr(cond, func)
         //cdest will be of type i32, not i1 because of lambda7c booleans
@@ -219,7 +220,7 @@ type LLVMCompiler =
         let storeinst = Store(desttype, expr_dest, Register(var_str), None)
         func.add_inst(storeinst)
         Register(var_str)
-      |   Lbox(Var(x)) ->
+      | Lbox(Var(x)) ->
         let entryopt = this.symbol_table.get_entry(x,0)
         let var_entry = entryopt.Value
         let (etype, gindex) = 
@@ -255,7 +256,11 @@ type LLVMCompiler =
         let BBCond = newBasicBlock(label_cond, v_pred)
         func.addBB(BBCond)
         let cdest = this.compile_expr(cond, func)
-        let brinst = Bri1(cdest, label_loop, label_endloop)
+        let ccast = this.newid("r")
+        //cdest will be of type i32, not i1 because of lambda7c booleans
+        //need to downcast cdest to an i1 before branch
+        func.add_inst(Cast(ccast,"trunc",Basic("i32"),cdest,Basic("i1")))
+        let brinst = Bri1(Register(ccast), label_loop, label_endloop)
         let realabel_cond = func.currentBBlabel()
         let v_cond = Vec<string>()
         v_cond.Add(realabel_cond)
