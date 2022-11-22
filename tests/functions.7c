@@ -1,0 +1,2 @@
+(define x (lambda z (z+1)))
+(x 1)

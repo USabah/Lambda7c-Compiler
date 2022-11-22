@@ -154,9 +154,8 @@ let arglist_string(arglist:Conslist<(LLVMtype*LLVMexpr)>) =
     str <- str + type_string(t) + " " + expr_string(dest_expr)
     if i <> last_index then
       str <- str + ", "
-    else str <- str + ")"
     i <- i + 1
-  str
+  str + ")"
 
 /////need to come back to this eventually
 let structlist_string(vec:Vec<LLVMtype>) = 
@@ -566,7 +565,6 @@ type LLVMprogram =
      functions: Vec<LLVMFunction>;
      mutable postamble : string;  // stuff you don't want to know about
      strconsts:HashMap<string,string>;
-     strsize:HashMap<string,int>;
   }
 
   member this.addGD(decl:LLVMdeclaration) = 
@@ -598,7 +596,6 @@ let newLLVMprogram(name:string) =
      functions = Vec<LLVMFunction>();
      postamble = "";
      strconsts = HashMap<string,string>();
-     strsize = HashMap<string,int>();
   }
 
 //Test cases:

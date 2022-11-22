@@ -33,7 +33,7 @@ and table_frame =
     name : string;
     entries:HashMap<string, TableEntry>;
     parent_scope:table_frame option;
-    mutable closure:SortedDictionary<string,(int*lltype)>;
+    mutable closure:SortedDictionary<(string*int),lltype>;
   }
 
 type SymbolTable =  // wrapping structure for symbol table frames
@@ -81,12 +81,12 @@ type SymbolTable =  // wrapping structure for symbol table frames
         table_frame.name=n;
         entries=HashMap<string,TableEntry>();
         parent_scope = Some(this.current_frame);
-        closure = SortedDictionary<string,(int*lltype)>();
+        closure = SortedDictionary<(string*int),lltype>();
       }
     this.frame_hash.[(line,column)] <- newframe
     this.current_frame <- newframe
 
-  member this.set_closure(closure: SortedDictionary<string, (int*lltype)>, 
+  member this.set_closure(closure: SortedDictionary<(string*int), lltype>, 
                           f: table_frame) = 
     f.closure <- closure
 
@@ -182,14 +182,14 @@ type SymbolTable =  // wrapping structure for symbol table frames
     else false
 
   member this.find_closure() = 
-    let fvs = SortedDictionary<string,(int*lltype)>()
+    let fvs = SortedDictionary<(string*int),lltype>()
     this._collect_freevars(fvs)
     fvs
   
-  member this._collect_freevars(fvs:SortedDictionary<string,(int*lltype)>) = 
-    let mutable current_frame = this.parent(Some(this.current_frame)) 
-    while isSome current_frame do
-      for entry in current_frame.Value.entries do
+  member this._collect_freevars(fvs:SortedDictionary<(string*int),lltype>) = 
+    let mutable parent_frame = this.parent(Some(this.current_frame)) 
+    if isSome parent_frame then
+      for entry in parent_frame.Value.entries do
         let (x,xentry) = (entry.Key, entry.Value)
         let mutable gindex = 0
         let t = 
@@ -198,8 +198,10 @@ type SymbolTable =  // wrapping structure for symbol table frames
             | LambdaDef(lt,gi,_,_) -> gindex <- gi; lt
         match t with
           | LLfun(_,_) -> () //skip functions
-          | _ -> fvs.Add(x, (gindex, t)); ()
-      current_frame <- this.parent(current_frame)
+          | _ -> fvs.Add((x,gindex), t); ()
+
+  member this.get_current_closure() = 
+    this.current_frame.closure
 
   member this.check_tlambda (identifier:string,expression:LBox<expr>) = 
     match expression with
@@ -481,6 +483,8 @@ type SymbolTable =  // wrapping structure for symbol table frames
             b.line b.column btype
           LLuntypable
         else LLunit //since the loop may not run at all
+      | Lbox(Sequence(Lbox(Var("getint"))::args)) when args.Length=0 ->
+        LLint
       | Lbox(Beginseq(se)) | Lbox(Sequence(se)) ->
         let mutable setype = LLunknown
         let mutable breakloop = false
@@ -594,7 +598,7 @@ let mutable global_frame = // root frame
     table_frame.name = "global";
     entries = HashMap<string,TableEntry>();
     parent_scope = None;
-    closure = SortedDictionary<string, (int*lltype)>(); 
+    closure = SortedDictionary<(string*int),lltype>(); 
   }
 let symbol_table =
   {
@@ -609,7 +613,7 @@ let makeSymbolTable =
       table_frame.name = "global";
       entries = HashMap<string,TableEntry>();
       parent_scope = None;
-      closure = SortedDictionary<string, (int*lltype)>(); 
+      closure = SortedDictionary<(string*int),lltype>(); 
     }
   let symb_table =
     {

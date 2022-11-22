@@ -38,16 +38,11 @@ type LLVMCompiler =
     let old_id = sprintf "%s_%d" str (this.gindex)
     old_id
   
-  member this.translate_type(expr_t:lltype, strsize:Option<int>) =
+  member this.translate_type(expr_t:lltype) =
     match expr_t with
       | LLint -> Basic("i32")
       | LLfloat -> Basic("double")
-      | LLstring -> 
-        if isSome strsize then
-          Array_t(strsize.Value,Basic("i8")) 
-        else
-          printfn "\n\n\nArray_t size was not passed!!!!!"
-          Void_t
+      //| LLstring -> 
       //| LList(a) -> Arr
       | _ -> Void_t
 
@@ -75,7 +70,6 @@ type LLVMCompiler =
           strid <- this.newgid("str")
           let decl = Globalconst(strid,Array_t(str_size,Basic("i8")),Sconst(str),None)
           this.program.addGD(decl)
-          this.program.strsize.[strid] <- str_size
           this.program.strconsts.Add(str, strid)
         let reg = this.newid("r")
         let arr_inst = Arrayindex(reg,str_size,Basic("i8"),Global(strid),Iconst(0))
@@ -86,7 +80,7 @@ type LLVMCompiler =
         let desta = this.compile_expr(a, func)
         let destb = this.compile_expr(b, func)
         let r1 = this.newid("r")
-        let rtype = this.translate_type(this.symbol_table.infer_type(expression), None)
+        let rtype = this.translate_type(this.symbol_table.infer_type(expression))
         match rtype with
           | Basic("double") -> 
             let cmp_op = oprep(expression, true)
@@ -112,7 +106,7 @@ type LLVMCompiler =
         let desta = this.compile_expr(a, func)
         let destb = this.compile_expr(b, func)
         let r1 = this.newid("r")
-        let rtype = this.translate_type(this.symbol_table.infer_type(expression), None)
+        let rtype = this.translate_type(this.symbol_table.infer_type(expression))
         match rtype with
           | Basic("double") -> 
             let new_op = oprep(expression, true)
@@ -136,7 +130,6 @@ type LLVMCompiler =
           | LLstring -> //Array_t
             ////this.newgid's most recent return the string we're printing?
             let strid = this.oldgid("str")
-            let strsize = this.program.strsize.[strid]
             let call_inst = Call(None,Void_t,[],"lambda7c_printstr",[(Pointer(Basic("i8")),dest)])
             func.add_inst(call_inst)
             Novalue
@@ -186,7 +179,7 @@ type LLVMCompiler =
         let newBB = newBasicBlock(endif, v_endifBB)
         func.addBB(newBB)
         //check type of true branch (same as false branch)
-        let desttype = this.translate_type(this.symbol_table.infer_type(tcase), None)
+        let desttype = this.translate_type(this.symbol_table.infer_type(tcase))
         match desttype with
           | Void_t -> Novalue
           | _ -> 
@@ -209,7 +202,7 @@ type LLVMCompiler =
         if etype = LLstring then
           desttype <- Pointer(Basic("i8"))
         else 
-          desttype <- this.translate_type(etype, None)
+          desttype <- this.translate_type(etype)
         let already_allocated = this.allocated_vars.Contains(var_str)
         /////printfn "VAR_STR: %s" var_str //as of now, two defines of the same variable
         //which are in the same scope will use the newly assigned gindex
@@ -232,11 +225,27 @@ type LLVMCompiler =
         if etype = LLstring then
           desttype <- Pointer(Basic("i8"))
         else
-          desttype <- this.translate_type(etype, None)
+          desttype <- this.translate_type(etype)
         let reg = this.newid("r") /////not var_str
         let loadinst = Load(reg,desttype,Register(var_str),None)
         func.add_inst(loadinst)
         Register(reg)
+      | Lbox(Sequence(Lbox(Var("getint"))::args)) when args.Length=0 ->
+        let r1 = this.newid("in")
+        func.add_inst(Call(Some(r1),Basic("i32"),[],"lambda7c_cin",[]))
+        Register(r1)
+      | Lbox(Sequence(Lbox(Var(x))::args)) ->
+        //Function application
+        //DESTTYPE WILL JUST BE THE FINAL TYPE OF THE INNER LOOP
+        let argtypeArr = List<LLVMtype>
+        for Lbox(arg) in args do
+          let argtype = this.translate_type(this.symbol_table.infer_type(arg))
+          argtypeArr.Add(argtype)
+          //////////////
+        let reg = this.newid("r") /////not var_str
+        //func.add_inst(Call(Some(reg),desttype,[],x,args
+        Register(reg)
+      
       | Lbox(Sequence(se)) | Lbox(Beginseq(se)) ->
         let mutable ddest = Register("r1")
         for expres in se do
@@ -298,12 +307,13 @@ type LLVMCompiler =
     match ptype with
       | LLuntypable -> None //errors handled by typechecker
       | _ ->
-        this.program.preamble <- sprintf "%s\n%s\n%s\n%s\n%s"
+        this.program.preamble <- sprintf "%s\n%s\n%s\n%s\n%s\n%s"
           "target triple = \"x86_64-pc-linux-gnu\""
           "declare void @lambda7c_printint(i32)"
           "declare void @lambda7c_printfloat(double)"
           "declare void @lambda7c_printstr(i8*)"
           "declare void @lambda7c_newline(i8*)"
+          "declare i32 @lambda7c_cin()"
           
         //create a main function, but don't push onto program until end
         let mainfunc = 
