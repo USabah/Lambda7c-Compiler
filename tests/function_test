@@ -1,0 +1,2 @@
+(define pi 3.1415927)
+(define area (lambda (radius:float) (* radius (* radius pi))))
