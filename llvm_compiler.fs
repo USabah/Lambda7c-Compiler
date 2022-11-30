@@ -5,7 +5,7 @@ open lambda7c
 open Recless.Base
 open Option
 
-//To start off, do the following cases: Add, 
+type Conslist<'K> = 'K list
 
 //fsharpc llvm_compiler.fs -r llvmir.dll
 
@@ -190,39 +190,32 @@ type LLVMCompiler =
       
       | Lbox(Define(Lbox(_,var),(Lbox(TypedLambda(args,_,exp)) as l_expr)))
       | Lbox(Define(Lbox(_,var),(Lbox(Lambda(args,exp)) as l_expr))) ->
-        let argsVec = Vec<LLVMtype*string>() //args + closure
-        let mutable llvm_arg_type = Void_t
-        let entryopt = this.symbol_table.get_entry(var,0)
-        let var_entry = entryopt.Value
-        let (etype, gindex) =
-          match var_entry with
-            | LambdaDef(l,g,_,_) -> (l,g)
-            | _ -> //SHOULDN'T BE REACHABLE
-              printfn "UNREACHABLE"
-              (LLuntypable, 0)
-        //Add function arguments
-        for Lbox(argTup) in args do
-          /////////////////////don't load original identifier, load new identifier
-          let (_,arg) = argTup
-          let farg_identifier = sprintf "farg_%s_%d" arg gindex
-          llvm_arg_type <- this.translate_type(etype)
-          argsVec.Add((llvm_arg_type, farg_identifier))
-        //Add closure arguments
-        //get lambda expr line and col number:
-        
+        let orig_lindex = this.lindex
+        this.lindex <- 0
+        let fun_type = this.symbol_table.infer_type(expression)
+        let r_type = 
+          this.translate_type(
+            match fun_type with
+              | LLfun(_,r) -> r
+              | _ -> LLuntypable
+          )
+        //let r_type = this.translate_type(this.symbol_table.infer_type(expression))
         //swap frames
         let func_frame = this.symbol_table.frame_hash.[(l_expr.line,l_expr.column)]
         let orig_frame = this.symbol_table.current_frame
         this.symbol_table.current_frame <- func_frame
-        let closure = func_frame.closure
-        
-        for kvPair in closure do
-          llvm_arg_type <- Pointer(this.translate_type(kvPair.Value))
-          let (var_name, gindex) = kvPair.Key
-          let free_var_identifier = sprintf "%s_%d" var_name gindex
-          argsVec.Add((llvm_arg_type, free_var_identifier))  
-        let r_type = this.translate_type(this.symbol_table.infer_type(exp))
-        let fun_identifier = this.newgid(var)
+
+        let argsVec = Vec<LLVMtype*string>() //args + closure
+        let mutable llvm_arg_type = Void_t
+        let entryopt = this.symbol_table.get_entry(var,0)
+        let var_entry = entryopt.Value
+        let gindex =
+          match var_entry with
+            | LambdaDef(_,g,_,_) -> g
+            | _ -> //SHOULDN'T BE REACHABLE
+              printfn "UNREACHABLE"
+              0
+        let fun_identifier = sprintf "%s_%d" var gindex
         let lambda_fun = 
           {
             LLVMFunction.name = fun_identifier;
@@ -233,6 +226,41 @@ type LLVMCompiler =
             bblocator = HashMap<string,int>();
           }
         lambda_fun.addBB(newBasicBlock("beginfun", Vec<string>()))
+        
+        //Add function arguments
+        for Lbox(argTup) in args do
+          /////////////////////don't load original identifier, load new identifier
+          let (spec_type,arg) = argTup
+          let entryopt = this.symbol_table.get_entry(arg,0)
+          let var_entry = entryopt.Value
+          let gindex =
+            match var_entry with
+              | LambdaDef(_,g,_,_) -> g
+              | SimpleDef(_,g,_) -> g
+          let farg_identifier = sprintf "farg_%s_%d" arg gindex
+          if isSome spec_type then
+            llvm_arg_type <- this.translate_type(spec_type.Value)
+          else 
+            llvm_arg_type <- this.translate_type(this.symbol_table.get_type(arg,0))
+          argsVec.Add((llvm_arg_type, farg_identifier))
+        
+        //Add initialization instructions
+        for (f_arg_type, f_arg_name) in argsVec do
+          let arg_name = f_arg_name.Substring(5)
+          let allocainst = Alloca(arg_name, f_arg_type, None)
+          let storeinst = Store(f_arg_type, Register(f_arg_name), Register(arg_name), None)
+          lambda_fun.add_inst(allocainst) 
+          lambda_fun.add_inst(storeinst) 
+
+        //Add closure arguments
+        let closure = func_frame.closure
+        for kvPair in closure do
+          llvm_arg_type <- Pointer(this.translate_type(kvPair.Value))
+          let (var_name, gindex) = kvPair.Key
+          let free_var_identifier = sprintf "%s_%d" var_name gindex
+          argsVec.Add((llvm_arg_type, free_var_identifier))  
+        
+        this.lindex <- orig_lindex
         let reg = this.compile_expr(exp, lambda_fun)
         //restore original frame
         this.symbol_table.current_frame <- orig_frame
@@ -240,10 +268,7 @@ type LLVMCompiler =
         lambda_fun.add_inst(ret)
         this.program.functions.Add(lambda_fun)
         reg
-        /////Close previous LLVMFunction
      
-     ///// | Lbox(Lambda(args,exp)) | Lbox(TypedLambda(args,_,exp)) ->
-
       | Lbox(Define(Lbox(_,var), value)) | Lbox(TypedDefine(Lbox(_,var), value))
       | Lbox(Setq(Lbox(var), value)) ->
         let identifier = var
@@ -292,19 +317,62 @@ type LLVMCompiler =
         func.add_inst(Call(Some(r1),Basic("i32"),[],"lambda7c_cin",[]))
         Register(r1)
       
-      (*| Lbox(Sequence(Lbox(Var(x))::args)) ->
+      | Lbox(Sequence(Lbox(Var(func_name))::args)) ->
         //Function application
-        //DESTTYPE WILL JUST BE THE FINAL TYPE OF THE INNER LOOP
-        let argtypeArr = List<LLVMtype>
-        for Lbox(arg) in args do
-          let argtype = this.translate_type(this.symbol_table.infer_type(arg))
-          argtypeArr.Add(argtype)
-          //////////////
+        ///////////CLOSURE IS EMPTY FIX IT
         
+        let (func_frame_opt,entry_opt) = this.symbol_table.get_entry_frame(func_name,0)
+        let func_frame = func_frame_opt.Value
+        let closure = func_frame.closure
+        let entry = entry_opt.Value
+        
+        let (typeList, return_type) =  
+          match entry with
+            | LambdaDef(t,_,_,_) -> 
+              match t with
+                | LLfun(l,r) -> (l,r)
+                | _ -> ([LLuntypable], LLuntypable)
+            | _ -> ([LLuntypable], LLuntypable) 
+          
+        //swap frames
+        let orig_frame = this.symbol_table.current_frame
+        this.symbol_table.current_frame <- func_frame
+        
+        let mutable argtypeList = [(Void_t, Novalue)]
+        argtypeList <-
+          match argtypeList with
+            | a::b -> b
+            | a -> a
+       
+        //Add closure args (in reverse)
+        for kvPair in closure do
+          printfn "ADDING CLOSURE ARG"
+          let llvm_arg_type = Pointer(this.translate_type(kvPair.Value))
+          let (var_name, gindex) = kvPair.Key
+          let reg_str = sprintf "%s_%d" var_name gindex
+          let exp = Register(reg_str)
+          argtypeList <- (llvm_arg_type, exp)::argtypeList
+        
+        
+        //let mutable clos_index = args.Length - 1
+        let mutable func_index = args.Length - typeList.Length - 1;
+
+        //Add function args (in reverse) 
+        while func_index >= 0 do
+          printfn "ADDING FUNCTION ARG"
+          let exp = args.[func_index]
+          let arg = exp.value
+          let argtype = this.translate_type(typeList.[func_index])
+          let dest = this.compile_expr(exp,func)
+          argtypeList <- (argtype,dest)::argtypeList
+          func_index <- func_index - 1
+        
+        let desttype = this.translate_type(return_type) 
         let reg = this.newid("r") 
-        //func.add_inst(Call(Some(reg),desttype,[],x,args
+        func.add_inst(Call(Some(reg),desttype,[],func_name,argtypeList))
+        //restore frame
+        this.symbol_table.current_frame <- orig_frame
         Register(reg)
-      *)
       | Lbox(Sequence(se)) | Lbox(Beginseq(se)) ->
         let mutable ddest = Register("r1")
         for expres in se do

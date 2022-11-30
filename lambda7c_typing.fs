@@ -450,8 +450,8 @@ type SymbolTable =  // wrapping structure for symbol table frames
               //update closure
               let fvs = this.find_closure() 
               this.set_closure(fvs, this.current_frame)
-              printfn "TESTING: \nCLOSURE FOR variable %A: %A\n" 
-                identifier (this.current_frame.closure)
+              //printfn "TESTING: \nCLOSURE FOR variable %A: %A\n" 
+                //identifier (this.current_frame.closure)
               this.pop_frame() |> ignore
               if index = 0 then
                 LLuntypable
