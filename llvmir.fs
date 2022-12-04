@@ -25,7 +25,7 @@ LLVMexpr : expressions can be registers, %r1, or constants 1, etc
 Instruction: this is the most important type to study and understand
 LLVMdeclaration : for global declarations such as for string literals
 BasicBlock : all instructions are in basic blocks, each block has a label
-LLVMfunction : represents a function declaration, which is always global
+LLVMFunction : represents a function declaration, which is always global
 LLVMprogram : top level structure consisting of declarations and functions
 
 There is (currently) only one function in this file: 'destination', which
@@ -154,9 +154,22 @@ let arglist_string(arglist:Conslist<(LLVMtype*LLVMexpr)>) =
     str <- str + type_string(t) + " " + expr_string(dest_expr)
     if i <> last_index then
       str <- str + ", "
-    else str <- str + ")"
     i <- i + 1
-  str
+  str + ")"
+
+let func_args_string(arglist:Vec<(LLVMtype*string)>) = 
+  let mutable str = "("
+  let last_index = arglist.Count - 1
+  let mutable i = 0
+  for tup in arglist do
+    let t = fst tup
+    let identifier = snd tup
+    str <- str + type_string(t) + " %" + identifier
+    if i <> last_index then
+      str <- str + ", "
+    i <- i + 1
+  str + ")"
+
 
 /////need to come back to this eventually
 let structlist_string(vec:Vec<LLVMtype>) = 
@@ -566,7 +579,6 @@ type LLVMprogram =
      functions: Vec<LLVMFunction>;
      mutable postamble : string;  // stuff you don't want to know about
      strconsts:HashMap<string,string>;
-     strsize:HashMap<string,int>;
   }
 
   member this.addGD(decl:LLVMdeclaration) = 
@@ -580,15 +592,16 @@ type LLVMprogram =
     pr_str <- pr_str + this.preamble + "\n"
     for decl in this.global_declarations do
       pr_str <- pr_str + decl.to_string() + "\n"
-    ////////temporarily add main
-    pr_str <- pr_str + "define i32 @main(){\n"
     for func in this.functions do
+      let func_def_string = 
+        sprintf "define %s @%s%s {\n" 
+          (type_string(func.return_type)) (func.name) (func_args_string(func.formal_args))
+      pr_str <- pr_str + func_def_string 
       for bblock in func.body do
         for instruction in bblock.body do
           pr_str <- pr_str + instruction.to_string() + "\n"
+      pr_str <- pr_str + "}\n"
     pr_str <- pr_str + this.postamble 
-    ////////temporarily close main
-    pr_str <- pr_str + "}\n"
     pr_str
 
 let newLLVMprogram(name:string) = 
@@ -598,7 +611,6 @@ let newLLVMprogram(name:string) =
      functions = Vec<LLVMFunction>();
      postamble = "";
      strconsts = HashMap<string,string>();
-     strsize = HashMap<string,int>();
   }
 
 //Test cases:
