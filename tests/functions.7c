@@ -1,0 +1,6 @@
+(define x 1)
+(define f (lambda (y:int):int (+ y x)))
+(let (x 2) (begin
+  (define g (lambda (y:int):int (+ (f y) x)))
+(display (+ (f 0) (g 0))) //should print 4
+ ))
