@@ -1,0 +1,8 @@
+(define x 1)
+(define f (lambda (y:int):int (+ x y)))
+(let (x 4) (begin
+  (display (f 2))
+  (display x)
+))
+(display x)
+(display "\n")

@@ -316,19 +316,19 @@ type LLVMCompiler =
         let r1 = this.newid("in")
         func.add_inst(Call(Some(r1),Basic("i32"),[],"lambda7c_cin",[]))
         Register(r1)
-      
       | Lbox(Sequence(Lbox(Var(func_name))::args)) ->
         //Function application
         let entry_opt = this.symbol_table.get_entry(func_name,0)
         let entry = entry_opt.Value
         
-        let (typeList, return_type, func_frame_opt) =  
+        let (typeList, return_type, func_frame_opt, global_index) =  
           match entry with
-            | LambdaDef(t,_,f,_) -> 
+            | LambdaDef(t,g,f,_) -> 
               match t with
-                | LLfun(l,r) -> (l,r,Some(f))
-                | _ -> ([LLuntypable], LLuntypable, None) //Should be unreachable...
-            | _ -> ([LLuntypable], LLuntypable, None) 
+                | LLfun(l,r) -> (l,r,Some(f), g)
+                | _ -> ([LLuntypable], LLuntypable, None, 0) //Should be unreachable...
+            | _ -> ([LLuntypable], LLuntypable, None, 0) 
+        let func_identifier = sprintf "%s_%d" func_name global_index
         let func_frame = func_frame_opt.Value
         let closure = func_frame.closure
         //swap frames
@@ -343,20 +343,15 @@ type LLVMCompiler =
        
         //Add closure args (in reverse)
         for kvPair in closure do
-          printfn "ADDING CLOSURE ARG"
           let llvm_arg_type = Pointer(this.translate_type(kvPair.Value))
           let (var_name, gindex) = kvPair.Key
           let reg_str = sprintf "%s_%d" var_name gindex
           let exp = Register(reg_str)
           argtypeList <- (llvm_arg_type, exp)::argtypeList
         
-        
-        //let mutable clos_index = args.Length - 1
-        let mutable func_index = args.Length - typeList.Length - 1;
-
-        //Add function args (in reverse) 
+        let mutable func_index = args.Length - 1;
+        //Add function args (in reverse, due to list data structure) 
         while func_index >= 0 do
-          printfn "ADDING FUNCTION ARG"
           let exp = args.[func_index]
           let arg = exp.value
           let argtype = this.translate_type(typeList.[func_index])
@@ -366,16 +361,37 @@ type LLVMCompiler =
         
         let desttype = this.translate_type(return_type) 
         let reg = this.newid("r") 
-        func.add_inst(Call(Some(reg),desttype,[],func_name,argtypeList))
+        func.add_inst(Call(Some(reg),desttype,[],func_identifier,argtypeList))
         //restore frame
         this.symbol_table.current_frame <- orig_frame
         Register(reg)
+      
+      | Lbox(Let(Lbox(var_tupl), value, exp)) | Lbox(TypedLet(Lbox(var_tupl), value, exp)) ->
+        let value_reg = this.compile_expr(value,func)
+        let func_frame = this.symbol_table.frame_hash.[(expression.line,expression.column)]
+        let (_,var_name) = var_tupl
+        let entry = func_frame.entries.[var_name]
+        let (var_type_LL, global_index) = 
+          match entry with
+            | SimpleDef(l,g,_) -> (l,g)
+            | LambdaDef(l,g,_,_) -> (l,g) //shouldn't be reachable (for now)
+        let var_type = this.translate_type(var_type_LL)
+        let var_reg_name = sprintf "%s_%d" var_name global_index
+        //should compile similar to define
+        func.add_inst(Alloca(var_reg_name, var_type, None))
+        func.add_inst(Store(var_type, value_reg, Register(var_reg_name), None))
+        //swap frames
+        let orig_frame = this.symbol_table.current_frame
+        this.symbol_table.current_frame <- func_frame
+        let body_reg = this.compile_expr(exp,func)
+        //restore frame
+        this.symbol_table.current_frame <- orig_frame 
+        body_reg
       | Lbox(Sequence(se)) | Lbox(Beginseq(se)) ->
         let mutable ddest = Register("r1")
         for expres in se do
           ddest <- this.compile_expr(expres,func)
         ddest
-      /////loop and compile cond
       | Lbox(Whileloop(cond,loop)) ->
         let label_cond = this.newid("check_cond")
         let label_loop = this.newid("loop")

@@ -5,21 +5,29 @@ declare void @lambda7c_printstr(i8*)
 declare void @lambda7c_newline(i8*)
 declare i32 @lambda7c_cin()
 
-define double @area_6(double %farg_radius_5, double* %pi_1) {
+@str_1 = constant [2 x i8] c"\0a\00"
+define i32 @f_7(i32 %farg_y_6, i32* %x_1) {
 beginfun:
-%radius_5 = alloca double
-store double %farg_radius_5, double* %radius_5
-%r_1 = load double, double* %radius_5
-%r_2 = load double, double* %radius_5
-%r_3 = load double, double* %pi_1
-%r_4 = fmul double %r_2, %r_3
-%r_5 = fmul double %r_1, %r_4
-ret double %r_5
+%y_6 = alloca i32
+store i32 %farg_y_6, i32* %y_6
+%r_1 = load i32, i32* %x_1
+%r_2 = load i32, i32* %y_6
+%r_3 = add i32 %r_1, %r_2
+ret i32 %r_3
 }
 define i32 @main() {
 beginmain:
-%pi_1 = alloca double
-store double 3.1415927, double* %pi_1
-%r_6 = call double @area(double 5)
+%x_1 = alloca i32
+store i32 1, i32* %x_1
+%x_5 = alloca i32
+store i32 4, i32* %x_5
+%r_4 = call i32 @f_7(i32 2, i32* %x_1)
+call void @lambda7c_printint(i32 %r_4)
+%r_5 = load i32, i32* %x_5
+call void @lambda7c_printint(i32 %r_5)
+%r_6 = load i32, i32* %x_1
+call void @lambda7c_printint(i32 %r_6)
+%r_7 = getelementptr inbounds [2 x i8], [2 x i8]* @str_1, i64 0, i64 0
+call void @lambda7c_printstr(i8* %r_7)
 ret i32 0
 }
