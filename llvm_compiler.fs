@@ -455,7 +455,7 @@ type LLVMCompiler =
           "declare void @lambda7c_printint(i32)"
           "declare void @lambda7c_printfloat(double)"
           "declare void @lambda7c_printstr(i8*)"
-          "declare void @lambda7c_newline(i8*)"
+          "declare void @lambda7c_newline()"
           "declare i32 @lambda7c_cin()"
           this.program.preamble
           

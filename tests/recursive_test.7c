@@ -1,0 +1,2 @@
+(define log2 (lambda (n:int):int (if (< n 2) 0 (+ 1 (log2 (/ n 2))))))
+(display (log2 512))

@@ -263,7 +263,7 @@ type SymbolTable =  // wrapping structure for symbol table frames
       | Lbox(Binop("/",a,b)) | Lbox(Binop("%",a,b)) ->
         let (atype,btype) = (this.infer_type(a), this.infer_type(b))
         if atype=btype && (numerical atype) then atype
-        else 
+        else
           printfn "(%d,%d): TYPE ERROR: Can't perform operation between types %A and %A"
             a.line a.column atype btype
           LLuntypable

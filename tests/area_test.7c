@@ -1,0 +1,5 @@
+(define mymain (lambda (z) (
+  (define pi 3.1415927)
+  (define area (lambda (radius) (* radius (* radius pi))))
+)))
+(mymain 2)
