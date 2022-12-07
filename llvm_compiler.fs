@@ -450,15 +450,16 @@ type LLVMCompiler =
       | _ ->
         ///////////////////this should be in sym_table.global_declarations
         ///////////////////except target triple
-        this.program.preamble <- sprintf "%s\n%s\n%s\n%s\n%s\n%s\n%s"
+        this.program.preamble <- sprintf "%s"
           "target triple = \"x86_64-pc-linux-gnu\""
-          "declare void @lambda7c_printint(i32)"
-          "declare void @lambda7c_printfloat(double)"
-          "declare void @lambda7c_printstr(i8*)"
-          "declare void @lambda7c_newline()"
-          "declare i32 @lambda7c_cin()"
-          this.program.preamble
-          
+        let gdecVec = Vec<LLVMdeclaration>()
+        gdecVec.Add(Externfunc(Void_t, "lambda7c_printint", Vec<LLVMtype>([Basic("i32")])))
+        gdecVec.Add(Externfunc(Void_t, "lambda7c_printfloat", Vec<LLVMtype>([Basic("double")])))
+        gdecVec.Add(Externfunc(Void_t, "lambda7c_printstr", Vec<LLVMtype>([Pointer(Basic("i8"))])))
+        gdecVec.Add(Externfunc(Void_t, "lambda7c_newline", Vec<LLVMtype>()))
+        gdecVec.Add(Externfunc(Basic("i32"), "lambda7c_cin", Vec<LLVMtype>()))
+        this.program.appendGD(gdecVec)
+
         //create a main function, but don't push onto program until end
         let mainfunc = 
           {

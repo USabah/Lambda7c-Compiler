@@ -131,18 +131,16 @@ let tlist_string(tlist:Conslist<LLVMtype>) =
   else str
 
 let tlist_string2(tlist:Vec<LLVMtype>) = 
-  let mutable str = " "
+  let mutable str = "("
   let last_index = tlist.Count - 1
-  if last_index >= 0 then str <- str + "("
   let mutable i = 0
   for t in tlist do
     str <- str + type_string(t)
     if i <> last_index then
       str <- str + ", "
-    else str <- str + ")"
     i <- i + 1
-  if str = " " then ""
-  else str
+  str <- str + ")"
+  str
 
 let arglist_string(arglist:Conslist<(LLVMtype*LLVMexpr)>) = 
   let mutable str = "("

@@ -4,7 +4,6 @@ declare void @lambda7c_printfloat(double)
 declare void @lambda7c_printstr(i8*)
 declare void @lambda7c_newline()
 declare i32 @lambda7c_cin()
-
 @str_1 = constant [2 x i8] c"\0a\00"
 define i32 @f_7(i32 %farg_y_6, i32* %x_1) {
 beginfun:
