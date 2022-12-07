@@ -1,4 +1,4 @@
-define mymain = lambda z. {
+/*define mymain = lambda z. {
   define pi = 3.1415927;
   define area = lambda radius:float. radius*radius*pi;
   define intelligence_test = lambda x:int. {
@@ -8,8 +8,9 @@ define mymain = lambda z. {
   intelligence_test(51);
 }//mymain
 mymain(2);
-/*
-(define mymain (lambda z (
+*/
+
+(define mymain (lambda (z) (
   (define pi 3.1415927)
   (define area (lambda (radius:float) (* radius (* radius pi))))
   (define intelligence_test (lambda (x:int)
@@ -17,6 +18,6 @@ mymain(2);
       (define pi z)
       (display (area x)))))
   (intelligence_test 51)
-)
+)))
 (mymain 2)
-*/
+

@@ -201,18 +201,17 @@ type SymbolTable =  // wrapping structure for symbol table frames
           | LLfun(_,_) -> () //skip functions
           | _ -> fvs.Add((x,gindex), t); ()
 
-  member this.find_full_closure(expression:expr) =
+  (*member this.find_full_closure(expression:expr) =
     let fvs = SortedDictionary<(string*int),lltype>()
     this._collect_used_freevars(fvs)
     fvs
     //logic
-    (*
+    
     match cases in expression to see if Var(x) is a free variable
     It's a free variable if it hasn't been defined locally
     Maybe keep track of Defined variables in a set? 
-    *)
-
-  member this._collect_used_freevars(fvs:SortedDictionary<(string*int), lltype>) = 
+  *)
+  //member this._collect_used_freevars(fvs:SortedDictionary<(string*int), lltype>) = 
 
   member this.get_current_closure() = 
     this.current_frame.closure
