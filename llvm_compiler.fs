@@ -342,7 +342,6 @@ type LLVMCompiler =
         if global_index = 0 then
           let t = this.translate_type(typeList.[0])
           let reg = this.compile_expr(lb.[0],func)
-          printfn "LB[0] %A" (lb.[0])
           let ret_inst = Ret(t, reg)
           reg 
         else
