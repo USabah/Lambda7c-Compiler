@@ -1,0 +1,2 @@
+(define func (lambda (val:int) (display val)))
+(func 1)

@@ -40,7 +40,8 @@ type SymbolTable =  // wrapping structure for symbol table frames
   {
      mutable current_frame: table_frame;
      mutable global_index: int;
-     frame_hash:HashMap<(int*int),table_frame>;
+     frame_hash: HashMap<(int*int),table_frame>;
+     exported: HashMap<string, lltype>; // map of closure names to type definition
   }
 
   member this.add_entry(s:string,t:lltype,a:expr option) = 
@@ -199,6 +200,18 @@ type SymbolTable =  // wrapping structure for symbol table frames
         match t with
           | LLfun(_,_) -> () //skip functions
           | _ -> fvs.Add((x,gindex), t); ()
+
+  (*member this.find_full_closure(expression:expr) =
+    let fvs = SortedDictionary<(string*int),lltype>()
+    this._collect_used_freevars(fvs)
+    fvs
+    //logic
+    
+    match cases in expression to see if Var(x) is a free variable
+    It's a free variable if it hasn't been defined locally
+    Maybe keep track of Defined variables in a set? 
+  *)
+  //member this._collect_used_freevars(fvs:SortedDictionary<(string*int), lltype>) = 
 
   member this.get_current_closure() = 
     this.current_frame.closure
@@ -485,6 +498,41 @@ type SymbolTable =  // wrapping structure for symbol table frames
         else LLunit //since the loop may not run at all
       | Lbox(Sequence(Lbox(Var("getint"))::args)) when args.Length=0 ->
         LLint
+      | Lbox(Sequence(Lbox(Var(func_name))::args)) ->
+        //Function Application or Return Value
+        //check if LambdaDef or SimpleDef
+        let entry_opt = this.get_entry(func_name,0)
+        let entry = entry_opt.Value
+        let (typeList, return_type, func_frame_opt, global_index) =
+          match entry with
+            | LambdaDef(t,g,f,_) ->
+              match t with
+                | LLfun(l,r) -> (l,r,Some(f), g)
+                | _ -> ([LLuntypable], LLuntypable, None, 0) //Should be unreachable...
+            | SimpleDef(t,g,a) -> ([t], LLuntypable, None, 0)
+        if global_index = 0 then
+          typeList.[0]
+        else
+          //check length of args 
+          if typeList.Length <> args.Length then
+            printfn "(%d,%d): TYPE ERROR: function %s expects %d argument(s) but recieved %d" 
+              expression.line expression.column func_name typeList.Length args.Length
+            LLuntypable
+          else
+            //check that args match arg type
+            let mutable index = 0 
+            let mutable breakloop = false
+            while index < typeList.Length && not(breakloop) do
+              let arg_type = this.infer_type(args.[index])
+              if arg_type <> typeList.[index] then
+                printfn "(%d,%d): TYPE ERROR: function %s expected arg type %A argument(s) but recieved %A at position %d" 
+                  (args.[index].line) (args.[index].column) func_name (typeList.[index]) arg_type index
+                breakloop <- true
+              index <- index + 1
+            if breakloop then
+              LLuntypable
+            else
+              return_type
       | Lbox(Beginseq(se)) | Lbox(Sequence(se)) ->
         let mutable setype = LLunknown
         let mutable breakloop = false
@@ -502,6 +550,7 @@ type SymbolTable =  // wrapping structure for symbol table frames
         else 
           //printfn "(%d,%d) TEST: INFERRED TYPE %A FOR Sequence"
             //expression.line expression.column setype 
+         
           setype
       | Lbox(Setq(var,value)) -> /////should this return LLunit?
         let vartype = this.get_type(var.value,0)
@@ -605,6 +654,7 @@ let symbol_table =
     SymbolTable.current_frame=global_frame;
     global_index = 0;
     frame_hash = HashMap<(int*int),table_frame>();
+    exported = HashMap<string, lltype>(); 
   }
 
 let makeSymbolTable = 
@@ -620,5 +670,6 @@ let makeSymbolTable =
       SymbolTable.current_frame=g_frame;
       global_index = 0;
       frame_hash = HashMap<(int*int),table_frame>();
+      exported = HashMap<string, lltype>(); 
     }
   symb_table

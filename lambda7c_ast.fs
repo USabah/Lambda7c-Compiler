@@ -39,6 +39,7 @@ type expr =
   | Typedval of (lltype*expr)
   | Label of string   // not a proper expression - just a temporary
   | StrList of LBox<lltype option*string> list //Intermediate Addition
+  | Export of string
   | Error
   //  | Continuation of (expr -> expr)    // don't need
 
@@ -46,6 +47,7 @@ and lltype =  // abstract syntax for type expressions
   | LLint | LLfloat | LLstring
   | LList of lltype | LLtuple of lltype list
   | LLfun of (lltype list)*lltype
+  | LLclosure of (lltype list)*string
   | LLunknown | LLuntypable | LLvar of string | LLunit
 
 
@@ -56,7 +58,7 @@ let mutable Gmr = new_grammar<expr>("Axprplus")
 // 3. Define terminal and non-terminal symbols (lexer interface)
 let binops = ["+";"-";"*";"/";"%";"^";"=";"<";">";"<=";">=";"cons";"neq";"eq";"and";"or"]
 let uniops = ["~";"car";"cdr";"not";"display"]
-let keywords = ["NIL";"int";"unit";"float";"string";"unit";"let";"define";"begin";"lambda";"while";"setq";"if"] 
+let keywords = ["export";"NIL";"int";"unit";"float";"string";"unit";"let";"define";"begin";"lambda";"while";"setq";"if"] 
 let vecops = ["vmake";"vsetq";"vget"]
 let terminals = List.append (List.append (List.append keywords binops) uniops) vecops
 Gmr.terminals(terminals)
@@ -69,8 +71,12 @@ Gmr.valueterminal("VAR","Alphanum",fun s -> Var(string s))
 Gmr.lexterminal("COLON",":") // map terminal names to token forms
 Gmr.lexterminal("LPAREN","(") 
 Gmr.lexterminal("RPAREN",")") 
-Gmr.lexterminal("LBRACK","[") 
-Gmr.lexterminal("RBRACK","]") 
+Gmr.lexterminal("LBRACE","[") 
+Gmr.lexterminal("RBRACE","]") 
+Gmr.lexterminal("LBRACK","<") 
+Gmr.lexterminal("RBRACK",">") 
+Gmr.lexterminal("LBRACKEQ","<=") 
+Gmr.lexterminal("RBRACKEQ",">=") 
 //Gmr.nonterminals(["Expr";"Seq";"Binop";"Uniop";"Axpr";"Axprplus";"Typeopt";"Txpr";"VarTypeopt";"Strlist";"Sval";"Seq"]);  // these are in addition to AxprList
 Gmr.nonterminals(["Expr";"Seq";"Binop";"Uniop";"Axpr";"AxprList";"Typeopt";"Txpr";"VarTypeopt";"Strlist";"Sval";"Seq"]);  // these are in addition to AxprList
 
@@ -105,7 +111,7 @@ Gmr.production("Axprplus --> Axpr AxprList", fun rhs ->
 )
 
 //Vector Ops
-Gmr.production("Axpr --> LBRACK AxprList RBRACK", fun rhs -> 
+Gmr.production("Axpr --> LBRACE AxprList RBRACE", fun rhs -> 
   match (rhs.[1].value) with
     | Sequence(l) -> Vector(l)
     | Nil -> Vector([])
@@ -122,6 +128,12 @@ Gmr.production("Expr --> vmake Axpr Axpr", fun rhs ->
   VectorMake(rhs.[1], rhs.[2])
 )
 
+//export
+Gmr.production("Expr --> export VAR", fun rhs -> 
+  match rhs.[1].value with
+    | Var(s) -> Export(s)
+    | _ -> Error
+)
 
 //#Uniop and Binop
 
@@ -156,10 +168,10 @@ Gmr.production("Binop --> /", fun r -> Label("/"))
 Gmr.production("Binop --> %", fun r -> Label("%"))
 Gmr.production("Binop --> ^", fun r -> Label("^"))
 Gmr.production("Binop --> =", fun r -> Label("="))
-Gmr.production("Binop --> <", fun r -> Label("<"))
-Gmr.production("Binop --> >", fun r -> Label(">"))
-Gmr.production("Binop --> <=", fun r -> Label("<="))
-Gmr.production("Binop --> >=", fun r -> Label(">="))
+Gmr.production("Binop --> LBRACK", fun r -> Label("<"))
+Gmr.production("Binop --> RBRACK", fun r -> Label(">"))
+Gmr.production("Binop --> LBRACKEQ", fun r -> Label("<="))
+Gmr.production("Binop --> RBRACKEQ", fun r -> Label(">="))
 Gmr.production("Binop --> cons", fun r -> Label("cons"))
 Gmr.production("Binop --> neq", fun r -> Label("neq"))
 Gmr.production("Binop --> eq", fun r -> Label("eq"))
@@ -187,9 +199,15 @@ Gmr.production("Txpr --> int", fun r -> TypeExpr(LLint))
 Gmr.production("Txpr --> unit", fun r -> TypeExpr(LLunit))
 Gmr.production("Txpr --> float", fun r -> TypeExpr(LLfloat))
 Gmr.production("Txpr --> string", fun r -> TypeExpr(LLstring))
-Gmr.production("Txpr --> LBRACK Txpr RBRACK", fun rhs -> 
+Gmr.production("Txpr --> LBRACE Txpr RBRACE", fun rhs -> 
   match rhs.[1].value with
     | TypeExpr(t) -> TypeExpr(LList(t))
+    | _ -> Error
+)
+
+Gmr.production("Txpr --> LBRACK VAR RBRACK", fun rhs ->
+  match rhs.[1].value with
+    | Var(s) -> TypeExpr(LLclosure([],s))
     | _ -> Error
 )
 Gmr.production("Typeopt --> COLON Txpr", fun r -> r.[1].value)

@@ -21,7 +21,9 @@ type LLVMCompiler =
     mutable lindex: int; // local counter, set to 0 prior to compiling functions
     mutable errors: bool;
     allocated_vars: HashSet<string>;
-    // .. other stuff omitted
+    // maps each closure to its table frame and a hashmap that maps each field to its position and type 
+    // Hash(closure_var, (frame, Hash(field, (pos, type))))
+    clsmaps: HashMap<string,(table_frame*HashMap<string,(int*LLVMtype)>)>; 
   } //LLVMCompiler
 
   member this.newid(str:string) = 
@@ -196,7 +198,7 @@ type LLVMCompiler =
       
       | Lbox(Define(Lbox(_,var),(Lbox(TypedLambda(args,_,exp)) as l_expr)))
       | Lbox(Define(Lbox(_,var),(Lbox(Lambda(args,exp)) as l_expr))) ->
-        printfn "IN LAMBDA DEFINE"
+        printfn "IN LAMBDA DEFINE %s" var
         let orig_lindex = this.lindex
         this.lindex <- 0
         let fun_type = this.symbol_table.infer_type(expression)
@@ -305,8 +307,9 @@ type LLVMCompiler =
         Register(var_str)
       | Lbox(Var(x)) ->
         printfn "IN VAR: %s" x
+        printfn "FRAME_NAME: %s" (this.symbol_table.current_frame.name)
         let entryopt = this.symbol_table.get_entry(x,0)
-        ///////////ENTRYOPT IS NONE
+        ///////////ENTRYOPT IS NONE, IN THE WRONG FRAME (FRAME AREA)
         let var_entry = entryopt.Value
         let (etype, gindex) = 
           match var_entry with
@@ -342,15 +345,13 @@ type LLVMCompiler =
         if global_index = 0 then
           let t = this.translate_type(typeList.[0])
           let reg = this.compile_expr(lb.[0],func)
+          printfn "HERE"
           let ret_inst = Ret(t, reg)
           reg 
         else
           let func_identifier = sprintf "%s_%d" func_name global_index
           let func_frame = func_frame_opt.Value
           let closure = func_frame.closure
-          //swap frames
-          let orig_frame = this.symbol_table.current_frame
-          this.symbol_table.current_frame <- func_frame
           
           let mutable argtypeList = [(Void_t, Novalue)]
           argtypeList <-
@@ -376,13 +377,24 @@ type LLVMCompiler =
             argtypeList <- (argtype,dest)::argtypeList
             func_index <- func_index - 1
           
+          //swap frames
+          let orig_frame = this.symbol_table.current_frame
+          this.symbol_table.current_frame <- func_frame
+          
           let desttype = this.translate_type(return_type) 
-          let reg = this.newid("r") 
-          func.add_inst(Call(Some(reg),desttype,[],func_identifier,argtypeList))
+          let mutable reg = Some("")
+          if desttype <> Void_t then
+            let reg_name = this.newid("r")
+            reg <- Some(reg_name)
+          else
+            reg <- None
+          func.add_inst(Call(reg,desttype,[],func_identifier,argtypeList))
           //restore frame
           this.symbol_table.current_frame <- orig_frame
-          Register(reg)
-      
+          if isSome reg then
+            Register(reg.Value)
+          else
+            Novalue
       | Lbox(Let(Lbox(var_tupl), value, exp)) | Lbox(TypedLet(Lbox(var_tupl), value, exp)) ->
         printfn "IN LET"
         let value_reg = this.compile_expr(value,func)
@@ -470,15 +482,16 @@ type LLVMCompiler =
       | _ ->
         ///////////////////this should be in sym_table.global_declarations
         ///////////////////except target triple
-        this.program.preamble <- sprintf "%s\n%s\n%s\n%s\n%s\n%s\n%s"
+        this.program.preamble <- sprintf "%s"
           "target triple = \"x86_64-pc-linux-gnu\""
-          "declare void @lambda7c_printint(i32)"
-          "declare void @lambda7c_printfloat(double)"
-          "declare void @lambda7c_printstr(i8*)"
-          "declare void @lambda7c_newline()"
-          "declare i32 @lambda7c_cin()"
-          this.program.preamble
-          
+        let gdecVec = Vec<LLVMdeclaration>()
+        gdecVec.Add(Externfunc(Void_t, "lambda7c_printint", Vec<LLVMtype>([Basic("i32")])))
+        gdecVec.Add(Externfunc(Void_t, "lambda7c_printfloat", Vec<LLVMtype>([Basic("double")])))
+        gdecVec.Add(Externfunc(Void_t, "lambda7c_printstr", Vec<LLVMtype>([Pointer(Basic("i8"))])))
+        gdecVec.Add(Externfunc(Void_t, "lambda7c_newline", Vec<LLVMtype>()))
+        gdecVec.Add(Externfunc(Basic("i32"), "lambda7c_cin", Vec<LLVMtype>()))
+        this.program.appendGD(gdecVec)
+
         //create a main function, but don't push onto program until end
         let mainfunc = 
           {
@@ -514,6 +527,7 @@ let new_skeleton(name:string) =
     lindex = 0;
     errors = false;
     allocated_vars = HashSet<string>();
+    clsmaps = HashMap<string,(table_frame*HashMap<string,(int*LLVMtype)>)>(); 
   }
 
 let llvm_compiler = new_skeleton("") 
