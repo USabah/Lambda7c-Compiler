@@ -18,5 +18,4 @@ mymain(2);
       (display (area x)))))
   (intelligence_test 51.0)
 )))
-(mymain 2)
-
+(mymain 2.0)

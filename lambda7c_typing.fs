@@ -498,6 +498,41 @@ type SymbolTable =  // wrapping structure for symbol table frames
         else LLunit //since the loop may not run at all
       | Lbox(Sequence(Lbox(Var("getint"))::args)) when args.Length=0 ->
         LLint
+      | Lbox(Sequence(Lbox(Var(func_name))::args)) ->
+        //Function Application or Return Value
+        //check if LambdaDef or SimpleDef
+        let entry_opt = this.get_entry(func_name,0)
+        let entry = entry_opt.Value
+        let (typeList, return_type, func_frame_opt, global_index) =
+          match entry with
+            | LambdaDef(t,g,f,_) ->
+              match t with
+                | LLfun(l,r) -> (l,r,Some(f), g)
+                | _ -> ([LLuntypable], LLuntypable, None, 0) //Should be unreachable...
+            | SimpleDef(t,g,a) -> ([t], LLuntypable, None, 0)
+        if global_index = 0 then
+          typeList.[0]
+        else
+          //check length of args 
+          if typeList.Length <> args.Length then
+            printfn "(%d,%d): TYPE ERROR: function %s expects %d argument(s) but recieved %d" 
+              expression.line expression.column func_name typeList.Length args.Length
+            LLuntypable
+          else
+            //check that args match arg type
+            let mutable index = 0 
+            let mutable breakloop = false
+            while index < typeList.Length && not(breakloop) do
+              let arg_type = this.infer_type(args.[index])
+              if arg_type <> typeList.[index] then
+                printfn "(%d,%d): TYPE ERROR: function %s expected arg type %A argument(s) but recieved %A at position %d" 
+                  (args.[index].line) (args.[index].column) func_name (typeList.[index]) arg_type index
+                breakloop <- true
+              index <- index + 1
+            if breakloop then
+              LLuntypable
+            else
+              return_type
       | Lbox(Beginseq(se)) | Lbox(Sequence(se)) ->
         let mutable setype = LLunknown
         let mutable breakloop = false
@@ -515,6 +550,7 @@ type SymbolTable =  // wrapping structure for symbol table frames
         else 
           //printfn "(%d,%d) TEST: INFERRED TYPE %A FOR Sequence"
             //expression.line expression.column setype 
+         
           setype
       | Lbox(Setq(var,value)) -> /////should this return LLunit?
         let vartype = this.get_type(var.value,0)

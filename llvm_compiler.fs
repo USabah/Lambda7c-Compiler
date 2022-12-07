@@ -198,7 +198,7 @@ type LLVMCompiler =
       
       | Lbox(Define(Lbox(_,var),(Lbox(TypedLambda(args,_,exp)) as l_expr)))
       | Lbox(Define(Lbox(_,var),(Lbox(Lambda(args,exp)) as l_expr))) ->
-        printfn "IN LAMBDA DEFINE"
+        printfn "IN LAMBDA DEFINE %s" var
         let orig_lindex = this.lindex
         this.lindex <- 0
         let fun_type = this.symbol_table.infer_type(expression)
@@ -307,8 +307,9 @@ type LLVMCompiler =
         Register(var_str)
       | Lbox(Var(x)) ->
         printfn "IN VAR: %s" x
+        printfn "FRAME_NAME: %s" (this.symbol_table.current_frame.name)
         let entryopt = this.symbol_table.get_entry(x,0)
-        ///////////ENTRYOPT IS NONE
+        ///////////ENTRYOPT IS NONE, IN THE WRONG FRAME (FRAME AREA)
         let var_entry = entryopt.Value
         let (etype, gindex) = 
           match var_entry with
@@ -344,15 +345,13 @@ type LLVMCompiler =
         if global_index = 0 then
           let t = this.translate_type(typeList.[0])
           let reg = this.compile_expr(lb.[0],func)
+          printfn "HERE"
           let ret_inst = Ret(t, reg)
           reg 
         else
           let func_identifier = sprintf "%s_%d" func_name global_index
           let func_frame = func_frame_opt.Value
           let closure = func_frame.closure
-          //swap frames
-          let orig_frame = this.symbol_table.current_frame
-          this.symbol_table.current_frame <- func_frame
           
           let mutable argtypeList = [(Void_t, Novalue)]
           argtypeList <-
@@ -378,13 +377,24 @@ type LLVMCompiler =
             argtypeList <- (argtype,dest)::argtypeList
             func_index <- func_index - 1
           
+          //swap frames
+          let orig_frame = this.symbol_table.current_frame
+          this.symbol_table.current_frame <- func_frame
+          
           let desttype = this.translate_type(return_type) 
-          let reg = this.newid("r") 
-          func.add_inst(Call(Some(reg),desttype,[],func_identifier,argtypeList))
+          let mutable reg = Some("")
+          if desttype <> Void_t then
+            let reg_name = this.newid("r")
+            reg <- Some(reg_name)
+          else
+            reg <- None
+          func.add_inst(Call(reg,desttype,[],func_identifier,argtypeList))
           //restore frame
           this.symbol_table.current_frame <- orig_frame
-          Register(reg)
-      
+          if isSome reg then
+            Register(reg.Value)
+          else
+            Novalue
       | Lbox(Let(Lbox(var_tupl), value, exp)) | Lbox(TypedLet(Lbox(var_tupl), value, exp)) ->
         printfn "IN LET"
         let value_reg = this.compile_expr(value,func)
