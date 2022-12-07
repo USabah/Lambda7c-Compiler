@@ -40,7 +40,8 @@ type SymbolTable =  // wrapping structure for symbol table frames
   {
      mutable current_frame: table_frame;
      mutable global_index: int;
-     frame_hash:HashMap<(int*int),table_frame>;
+     frame_hash: HashMap<(int*int),table_frame>;
+     exported: HashMap<string, lltype>; // map of closure names to type definition
   }
 
   member this.add_entry(s:string,t:lltype,a:expr option) = 
@@ -199,6 +200,19 @@ type SymbolTable =  // wrapping structure for symbol table frames
         match t with
           | LLfun(_,_) -> () //skip functions
           | _ -> fvs.Add((x,gindex), t); ()
+
+  member this.find_full_closure(expression:expr) =
+    let fvs = SortedDictionary<(string*int),lltype>()
+    this._collect_used_freevars(fvs)
+    fvs
+    //logic
+    (*
+    match cases in expression to see if Var(x) is a free variable
+    It's a free variable if it hasn't been defined locally
+    Maybe keep track of Defined variables in a set? 
+    *)
+
+  member this._collect_used_freevars(fvs:SortedDictionary<(string*int), lltype>) = 
 
   member this.get_current_closure() = 
     this.current_frame.closure
@@ -605,6 +619,7 @@ let symbol_table =
     SymbolTable.current_frame=global_frame;
     global_index = 0;
     frame_hash = HashMap<(int*int),table_frame>();
+    exported = HashMap<string, lltype>(); 
   }
 
 let makeSymbolTable = 
@@ -620,5 +635,6 @@ let makeSymbolTable =
       SymbolTable.current_frame=g_frame;
       global_index = 0;
       frame_hash = HashMap<(int*int),table_frame>();
+      exported = HashMap<string, lltype>(); 
     }
   symb_table
