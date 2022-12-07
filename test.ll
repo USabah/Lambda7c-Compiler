@@ -4,6 +4,7 @@ declare void @lambda7c_printfloat(double)
 declare void @lambda7c_printstr(i8*)
 declare void @lambda7c_newline()
 declare i32 @lambda7c_cin()
+<<<<<<< HEAD
 @str_1 = constant [4 x i8] c"\0aA\0a\00"
 @str_2 = constant [4 x i8] c"\0aB\0a\00"
 @str_3 = constant [3 x i8] c"C\0a\00"
@@ -88,5 +89,19 @@ iffalse_48:
 call void @lambda7c_printstr(i8* %r_51)
 br label %endif_49
 endif_49:
+=======
+
+define i32 @func_5(i32 %farg_z_4) {
+beginfun:
+%z_4 = alloca i32
+store i32 %farg_z_4, i32* %z_4
+%r_1 = load i32, i32* %z_4
+ret i32 %r_1
+}
+define i32 @main() {
+beginmain:
+%r_2 = call i32 @func_5(i32 5)
+call void @lambda7c_printint(i32 %r_2)
+>>>>>>> 6d735df4f4fcb6548e85ac0fe1b071902f806d58
 ret i32 0
 }
