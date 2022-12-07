@@ -77,6 +77,7 @@ type LLVMCompiler =
         Register(reg)
       | Lbox(Nil) -> Novalue
       | Lbox(Binop(op,a,b)) when List.contains op cmp_op ->
+        printfn "IN BINOP"
         let desta = this.compile_expr(a, func)
         let destb = this.compile_expr(b, func)
         let r1 = this.newid("r")
@@ -95,14 +96,17 @@ type LLVMCompiler =
         Register(r2)
       //| Lbox(Binop("cons",a,b)) ->
       | Lbox(Binop("and",a,b)) | Lbox(Binop("&&",a,b)) ->
+          printfn "IN BINOP"
           let sc_lbox = lbox("", Integer(0), expression.line, expression.column)
           let ifelse_expr_box = lbox("", Ifelse(a,b,sc_lbox), expression.line, expression.column)
           this.compile_expr(ifelse_expr_box, func) 
       | Lbox(Binop("or",a,b)) | Lbox(Binop("||",a,b)) ->
+          printfn "IN BINOP"
           let sc_lbox = lbox("", Integer(1), expression.line, expression.column)
           let ifelse_expr_box = lbox("", Ifelse(a,sc_lbox,b), expression.line, expression.column)
           this.compile_expr(ifelse_expr_box, func) 
       | Lbox(Binop(op,a,b)) ->
+        printfn "IN BINOP"
         let desta = this.compile_expr(a, func)
         let destb = this.compile_expr(b, func)
         let r1 = this.newid("r")
@@ -116,6 +120,7 @@ type LLVMCompiler =
             func.add_inst(Binaryop(r1,new_op,rtype,desta,destb))
         Register(r1)
       | Lbox(Uniop("display", exp)) ->
+        printfn "IN UNIOP"
         let dest = this.compile_expr(exp, func)
         let exptype = this.symbol_table.infer_type(exp)
         match exptype with
@@ -139,6 +144,7 @@ type LLVMCompiler =
             this.errors <- true
             Novalue
       | Lbox(Ifelse(cond,tcase,fcase)) ->
+        printfn "IN IFELSE"
         let cdest = this.compile_expr(cond, func)
         //cdest will be of type i32, not i1 because of lambda7c booleans
         //need to downcast cdest to an i1 before branch
@@ -190,6 +196,7 @@ type LLVMCompiler =
       
       | Lbox(Define(Lbox(_,var),(Lbox(TypedLambda(args,_,exp)) as l_expr)))
       | Lbox(Define(Lbox(_,var),(Lbox(Lambda(args,exp)) as l_expr))) ->
+        printfn "IN LAMBDA DEFINE"
         let orig_lindex = this.lindex
         this.lindex <- 0
         let fun_type = this.symbol_table.infer_type(expression)
@@ -271,6 +278,7 @@ type LLVMCompiler =
      
       | Lbox(Define(Lbox(_,var), value)) | Lbox(TypedDefine(Lbox(_,var), value))
       | Lbox(Setq(Lbox(var), value)) ->
+        printfn "IN DEFINE/SETQ"
         let identifier = var
         let entryopt = this.symbol_table.get_entry(identifier,0)
         let var_entry = entryopt.Value
@@ -296,7 +304,9 @@ type LLVMCompiler =
         func.add_inst(storeinst)
         Register(var_str)
       | Lbox(Var(x)) ->
+        printfn "IN VAR: %s" x
         let entryopt = this.symbol_table.get_entry(x,0)
+        ///////////ENTRYOPT IS NONE
         let var_entry = entryopt.Value
         let (etype, gindex) = 
           match var_entry with
@@ -313,60 +323,69 @@ type LLVMCompiler =
         func.add_inst(loadinst)
         Register(reg)
       | Lbox(Sequence(Lbox(Var("getint"))::args)) when args.Length=0 ->
+        printfn "IN GETINT"
         let r1 = this.newid("in")
         func.add_inst(Call(Some(r1),Basic("i32"),[],"lambda7c_cin",[]))
         Register(r1)
-      | Lbox(Sequence(Lbox(Var(func_name))::args)) ->
-        //Function application
+      | Lbox(Sequence(Lbox(Var(func_name))::args as lb)) ->
+        printfn "FUNCTION APPLICATION %s" func_name
+        //Function application OR return var
         let entry_opt = this.symbol_table.get_entry(func_name,0)
         let entry = entry_opt.Value
-        
         let (typeList, return_type, func_frame_opt, global_index) =  
           match entry with
             | LambdaDef(t,g,f,_) -> 
               match t with
                 | LLfun(l,r) -> (l,r,Some(f), g)
                 | _ -> ([LLuntypable], LLuntypable, None, 0) //Should be unreachable...
-            | _ -> ([LLuntypable], LLuntypable, None, 0) 
-        let func_identifier = sprintf "%s_%d" func_name global_index
-        let func_frame = func_frame_opt.Value
-        let closure = func_frame.closure
-        //swap frames
-        let orig_frame = this.symbol_table.current_frame
-        this.symbol_table.current_frame <- func_frame
-        
-        let mutable argtypeList = [(Void_t, Novalue)]
-        argtypeList <-
-          match argtypeList with
-            | a::b -> b
-            | a -> a
+            | SimpleDef(t,g,a) -> ([t], LLuntypable, None, 0) 
+        if global_index = 0 then
+          let t = this.translate_type(typeList.[0])
+          let reg = this.compile_expr(lb.[0],func)
+          printfn "LB[0] %A" (lb.[0])
+          let ret_inst = Ret(t, reg)
+          reg 
+        else
+          let func_identifier = sprintf "%s_%d" func_name global_index
+          let func_frame = func_frame_opt.Value
+          let closure = func_frame.closure
+          //swap frames
+          let orig_frame = this.symbol_table.current_frame
+          this.symbol_table.current_frame <- func_frame
+          
+          let mutable argtypeList = [(Void_t, Novalue)]
+          argtypeList <-
+            match argtypeList with
+              | a::b -> b
+              | a -> a
        
-        //Add closure args (in reverse)
-        for kvPair in closure do
-          let llvm_arg_type = Pointer(this.translate_type(kvPair.Value))
-          let (var_name, gindex) = kvPair.Key
-          let reg_str = sprintf "%s_%d" var_name gindex
-          let exp = Register(reg_str)
-          argtypeList <- (llvm_arg_type, exp)::argtypeList
-        
-        let mutable func_index = args.Length - 1;
-        //Add function args (in reverse, due to list data structure) 
-        while func_index >= 0 do
-          let exp = args.[func_index]
-          let arg = exp.value
-          let argtype = this.translate_type(typeList.[func_index])
-          let dest = this.compile_expr(exp,func)
-          argtypeList <- (argtype,dest)::argtypeList
-          func_index <- func_index - 1
-        
-        let desttype = this.translate_type(return_type) 
-        let reg = this.newid("r") 
-        func.add_inst(Call(Some(reg),desttype,[],func_identifier,argtypeList))
-        //restore frame
-        this.symbol_table.current_frame <- orig_frame
-        Register(reg)
+          //Add closure args (in reverse)
+          for kvPair in closure do
+            let llvm_arg_type = Pointer(this.translate_type(kvPair.Value))
+            let (var_name, gindex) = kvPair.Key
+            let reg_str = sprintf "%s_%d" var_name gindex
+            let exp = Register(reg_str)
+            argtypeList <- (llvm_arg_type, exp)::argtypeList
+          
+          let mutable func_index = args.Length - 1;
+          //Add function args (in reverse, due to list data structure) 
+          while func_index >= 0 do
+            let exp = args.[func_index]
+            let arg = exp.value
+            let argtype = this.translate_type(typeList.[func_index])
+            let dest = this.compile_expr(exp,func)
+            argtypeList <- (argtype,dest)::argtypeList
+            func_index <- func_index - 1
+          
+          let desttype = this.translate_type(return_type) 
+          let reg = this.newid("r") 
+          func.add_inst(Call(Some(reg),desttype,[],func_identifier,argtypeList))
+          //restore frame
+          this.symbol_table.current_frame <- orig_frame
+          Register(reg)
       
       | Lbox(Let(Lbox(var_tupl), value, exp)) | Lbox(TypedLet(Lbox(var_tupl), value, exp)) ->
+        printfn "IN LET"
         let value_reg = this.compile_expr(value,func)
         let func_frame = this.symbol_table.frame_hash.[(expression.line,expression.column)]
         let (_,var_name) = var_tupl
@@ -388,11 +407,13 @@ type LLVMCompiler =
         this.symbol_table.current_frame <- orig_frame 
         body_reg
       | Lbox(Sequence(se)) | Lbox(Beginseq(se)) ->
+        printfn "IN SEQUENCE"
         let mutable ddest = Register("r1")
         for expres in se do
           ddest <- this.compile_expr(expres,func)
         ddest
       | Lbox(Whileloop(cond,loop)) ->
+        printfn "IN LOOP"
         let label_cond = this.newid("check_cond")
         let label_loop = this.newid("loop")
         let label_endloop = this.newid("endloop")
