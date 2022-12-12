@@ -1,10 +1,9 @@
 // recursion
 
-
+/*
 define log2 = int lambda n:int.if n<2 then 0 else 1+log2(n/2);
 print log2(512);
+*/
 
-/*
 (define log2 (lambda (n:int):int (if (< n 2) 0 (+ 1 (log2 (/ n 2))))))
 (display (log2 512))
-*/

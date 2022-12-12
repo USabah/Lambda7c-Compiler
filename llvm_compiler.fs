@@ -22,7 +22,7 @@ type LLVMCompiler =
     mutable errors: bool;
     allocated_vars: HashSet<string>;
     // maps each closure to its table frame and a hashmap that maps each field to its position and type 
-    // Hash(closure_var, (frame, Hash(field, (pos, type))))
+    // Hash(closure_name, (closure_frame, Hash(field, (pos, type))))
     clsmaps: HashMap<string,(table_frame*HashMap<string,(int*LLVMtype)>)>; 
   } //LLVMCompiler
 
@@ -79,7 +79,7 @@ type LLVMCompiler =
         Register(reg)
       | Lbox(Nil) -> Novalue
       | Lbox(Binop(op,a,b)) when List.contains op cmp_op ->
-        printfn "IN BINOP"
+        //printfn "IN BINOP"
         let desta = this.compile_expr(a, func)
         let destb = this.compile_expr(b, func)
         let r1 = this.newid("r")
@@ -92,23 +92,22 @@ type LLVMCompiler =
             let cmp_op = oprep(expression, false)
             func.add_inst(Icmp(r1,cmp_op,rtype,desta,destb))
         let r2 = this.newid("r")
-        //Need to convert to i32 since Ifelse and Whileloop assume that it's 
-        //an i32
+        //Need to convert to i32 since Ifelse and Whileloop assume that it's an i1
         func.add_inst(Cast(r2,"zext",Basic("i1"),Register(r1),Basic("i32")))
         Register(r2)
       //| Lbox(Binop("cons",a,b)) ->
       | Lbox(Binop("and",a,b)) | Lbox(Binop("&&",a,b)) ->
-          printfn "IN BINOP"
-          let sc_lbox = lbox("", Integer(0), expression.line, expression.column)
-          let ifelse_expr_box = lbox("", Ifelse(a,b,sc_lbox), expression.line, expression.column)
-          this.compile_expr(ifelse_expr_box, func) 
+        //printfn "IN BINOP"
+        let sc_lbox = lbox("", Integer(0), expression.line, expression.column)
+        let ifelse_expr_box = lbox("", Ifelse(a,b,sc_lbox), expression.line, expression.column)
+        this.compile_expr(ifelse_expr_box, func) 
       | Lbox(Binop("or",a,b)) | Lbox(Binop("||",a,b)) ->
-          printfn "IN BINOP"
-          let sc_lbox = lbox("", Integer(1), expression.line, expression.column)
-          let ifelse_expr_box = lbox("", Ifelse(a,sc_lbox,b), expression.line, expression.column)
-          this.compile_expr(ifelse_expr_box, func) 
+        //printfn "IN BINOP"
+        let sc_lbox = lbox("", Integer(1), expression.line, expression.column)
+        let ifelse_expr_box = lbox("", Ifelse(a,sc_lbox,b), expression.line, expression.column)
+        this.compile_expr(ifelse_expr_box, func) 
       | Lbox(Binop(op,a,b)) ->
-        printfn "IN BINOP"
+        //printfn "IN BINOP"
         let desta = this.compile_expr(a, func)
         let destb = this.compile_expr(b, func)
         let r1 = this.newid("r")
@@ -122,7 +121,7 @@ type LLVMCompiler =
             func.add_inst(Binaryop(r1,new_op,rtype,desta,destb))
         Register(r1)
       | Lbox(Uniop("display", exp)) ->
-        printfn "IN UNIOP"
+        //printfn "IN UNIOP"
         let dest = this.compile_expr(exp, func)
         let exptype = this.symbol_table.infer_type(exp)
         match exptype with
@@ -145,8 +144,39 @@ type LLVMCompiler =
               expression.line expression.column
             this.errors <- true
             Novalue
+      | Lbox(Uniop("~",exp)) ->
+        //printfn "IN UNIOP"
+        let destexp = this.compile_expr(exp, func)
+        let r1 = this.newid("r")
+        let rtype = this.translate_type(this.symbol_table.infer_type(expression))
+        match rtype with
+          | Basic("double") -> 
+            let new_op = oprep(expression, true)
+            func.add_inst(Unaryop(r1,new_op,None,rtype,destexp))
+          | _ -> 
+            ///multiply by -1
+            func.add_inst(Binaryop(r1,"mul",rtype,destexp,Iconst(-1)))
+        Register(r1)
+      | Lbox(Uniop("not",exp)) ->
+        //printfn "IN UNIOP"
+        let destexp = this.compile_expr(exp, func)
+        //if exp > 0 then 0 else 1
+        let if_else_expr = lbox("", Ifelse(
+                                      lbox("",
+                                        Binop(">",
+                                          exp,
+                                          lbox("",Integer(0),0,0))
+                                      ,0,0),
+                                      lbox("",Integer(0),0,0),
+                                      lbox("",Integer(1),0,0)
+                                    )
+                                    ,0,0
+                                )
+        let reg = this.compile_expr(if_else_expr, func)
+        reg
+      //| Lbox(Uniop("car",exp)) | Lbox(Uniop("cdr",exp)) 
       | Lbox(Ifelse(cond,tcase,fcase)) ->
-        printfn "IN IFELSE"
+        //printfn "IN IFELSE"
         let cdest = this.compile_expr(cond, func)
         //cdest will be of type i32, not i1 because of lambda7c booleans
         //need to downcast cdest to an i1 before branch
@@ -198,14 +228,15 @@ type LLVMCompiler =
       
       | Lbox(Define(Lbox(_,var),(Lbox(TypedLambda(args,_,exp)) as l_expr)))
       | Lbox(Define(Lbox(_,var),(Lbox(Lambda(args,exp)) as l_expr))) ->
-        printfn "IN LAMBDA DEFINE %s" var
+        //printfn "IN LAMBDA DEFINE %s" var
         let orig_lindex = this.lindex
         this.lindex <- 0
         let fun_type = this.symbol_table.infer_type(expression)
         let r_type = 
           this.translate_type(
             match fun_type with
-              | LLfun(_,r) -> r
+              ///////| LLfun(_,r) -> r
+              | LLclosure(_,r,_) -> r
               | _ -> LLuntypable
           )
         //let r_type = this.translate_type(this.symbol_table.infer_type(expression))
@@ -280,7 +311,7 @@ type LLVMCompiler =
      
       | Lbox(Define(Lbox(_,var), value)) | Lbox(TypedDefine(Lbox(_,var), value))
       | Lbox(Setq(Lbox(var), value)) ->
-        printfn "IN DEFINE/SETQ"
+        //printfn "IN DEFINE/SETQ"
         let identifier = var
         let entryopt = this.symbol_table.get_entry(identifier,0)
         let var_entry = entryopt.Value
@@ -306,10 +337,8 @@ type LLVMCompiler =
         func.add_inst(storeinst)
         Register(var_str)
       | Lbox(Var(x)) ->
-        printfn "IN VAR: %s" x
-        printfn "FRAME_NAME: %s" (this.symbol_table.current_frame.name)
+        //printfn "IN VAR: %s" x
         let entryopt = this.symbol_table.get_entry(x,0)
-        ///////////ENTRYOPT IS NONE, IN THE WRONG FRAME (FRAME AREA)
         let var_entry = entryopt.Value
         let (etype, gindex) = 
           match var_entry with
@@ -326,12 +355,12 @@ type LLVMCompiler =
         func.add_inst(loadinst)
         Register(reg)
       | Lbox(Sequence(Lbox(Var("getint"))::args)) when args.Length=0 ->
-        printfn "IN GETINT"
+        //printfn "IN GETINT"
         let r1 = this.newid("in")
         func.add_inst(Call(Some(r1),Basic("i32"),[],"lambda7c_cin",[]))
         Register(r1)
       | Lbox(Sequence(Lbox(Var(func_name))::args as lb)) ->
-        printfn "FUNCTION APPLICATION %s" func_name
+        //printfn "FUNCTION APPLICATION %s" func_name
         //Function application OR return var
         let entry_opt = this.symbol_table.get_entry(func_name,0)
         let entry = entry_opt.Value
@@ -339,13 +368,13 @@ type LLVMCompiler =
           match entry with
             | LambdaDef(t,g,f,_) -> 
               match t with
-                | LLfun(l,r) -> (l,r,Some(f), g)
+                //////////| LLfun(l,r) -> (l,r,Some(f),g)
+                | LLclosure(l,r,_) -> (l,r,Some(f),g)
                 | _ -> ([LLuntypable], LLuntypable, None, 0) //Should be unreachable...
             | SimpleDef(t,g,a) -> ([t], LLuntypable, None, 0) 
         if global_index = 0 then
           let t = this.translate_type(typeList.[0])
           let reg = this.compile_expr(lb.[0],func)
-          printfn "HERE"
           let ret_inst = Ret(t, reg)
           reg 
         else
@@ -396,7 +425,7 @@ type LLVMCompiler =
           else
             Novalue
       | Lbox(Let(Lbox(var_tupl), value, exp)) | Lbox(TypedLet(Lbox(var_tupl), value, exp)) ->
-        printfn "IN LET"
+        //printfn "IN LET"
         let value_reg = this.compile_expr(value,func)
         let func_frame = this.symbol_table.frame_hash.[(expression.line,expression.column)]
         let (_,var_name) = var_tupl
@@ -418,13 +447,13 @@ type LLVMCompiler =
         this.symbol_table.current_frame <- orig_frame 
         body_reg
       | Lbox(Sequence(se)) | Lbox(Beginseq(se)) ->
-        printfn "IN SEQUENCE"
+        //printfn "IN SEQUENCE"
         let mutable ddest = Register("r1")
         for expres in se do
           ddest <- this.compile_expr(expres,func)
         ddest
       | Lbox(Whileloop(cond,loop)) ->
-        printfn "IN LOOP"
+        //printfn "IN LOOP"
         let label_cond = this.newid("check_cond")
         let label_loop = this.newid("loop")
         let label_endloop = this.newid("endloop")
@@ -463,8 +492,9 @@ type LLVMCompiler =
         func.addBB(BBEndloop)
         //Whileloop returns type LLunit, so Novalue is returned
         Novalue
+      | Lbox(Export(_)) -> Novalue
       | _ -> 
-        printfn "EXPRESSION::: %A" expression
+        printfn "EXPRESSION: %A" expression
         printfn "(%d,%d): COMPILER ERROR: Expression is not yet supported by the compiler"
           expression.line expression.column
         this.errors <- true

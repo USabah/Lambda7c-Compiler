@@ -511,6 +511,10 @@ let oprep(expression:LBox<expr>, isfloat:bool) =
         | "and" when not(isfloat) -> "and" 
         | "or" when not(isfloat) -> "or" 
         | _ -> "INVALID OP"
+    | Lbox(Uniop(op,_)) ->
+      match op with
+        | "not" | "~" -> if isfloat then "fneg" else "INVALID OP"
+        | _ -> "INVALID OP"
     | _ -> "INVALID OP"
 
 type LLVMFunction =
