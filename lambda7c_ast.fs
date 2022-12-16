@@ -285,7 +285,6 @@ Gmr.production("Expr --> setq VAR Axpr ", semact8)
 //#Sequences
 
 let semact9 (rhs:Vec<Stackitem<expr>>) =  
-  printfn "REACHED"
   match (rhs.[1].value, rhs.[2].value) with
     | (a, Nil) -> let box = rhs.[1].tolbox(a) in Beginseq(box::[])
     | (a, Sequence(b)) -> let box = rhs.[1].tolbox(a) in Beginseq(box::b)

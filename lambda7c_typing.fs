@@ -8,7 +8,7 @@ open Option
 //fsharpc lambda7c_typing.fs -r lambda7c_ast.dll
 
 //lltype Methods
-let rec grounded_type = function    // equiv. to match arg with ...
+let rec grounded_type = function 
   | LLunknown | LLvar(_) | LLuntypable -> false
   | LList(t) -> grounded_type t
   | lltype.LLtuple(vs) -> List.forall grounded_type vs
@@ -44,6 +44,9 @@ type SymbolTable =  // wrapping structure for symbol table frames
      mutable global_index: int;
      frame_hash: HashMap<(int*int),table_frame>;
      exported: HashMap<string, lltype>; // map of closure names to type definition
+     // maps each closure to its table frame and a hashmap that maps each field to its position and type 
+     // Hash(closure_name, (closure_frame, Hash(field, (pos, type))))
+     clsmaps: HashMap<string,(table_frame*HashMap<string,(int*lltype)>)>;
   }
 
   member this.add_entry(s:string,t:lltype,a:expr option) = 
@@ -232,23 +235,45 @@ type SymbolTable =  // wrapping structure for symbol table frames
         let mutable index = 0
         let mutable error = false
         let mutable llvec = Vec<lltype>()
+        let mutable iterator = 0
+        let field_hash = HashMap<string,(int*lltype)>()
         for i in l do
           match i.value with
+            //currently compiler does not support type inference for arguments
             | (None,v) -> 
               index <- this.add_entry(v, LLunknown, Some(e.value)) 
               llvec.Add(LLunknown)
-            | (Some(t),v) -> 
-              index <- this.add_entry(v, t, Some(e.value)) 
-              llvec.Add(t)
+              //If adding type inference for arguments, add unknown entry to  and update later
+            | (Some(t),v) ->
+              match t with
+                | LLclosure(_,_,n) ->
+                  let mutable closure_type = LLunknown
+                  if this.exported.ContainsKey(n) then
+                    closure_type <- this.exported.[n]
+                  else
+                    printfn "(%d,%d): TYPE ERROR: Argument %s is instantiated as a closure type %s, but that type has not been exported"
+                      e.line e.column v n
+                    error <- true
+                  index <- this.add_entry(v, closure_type, Some(e.value))
+                  llvec.Add(closure_type)
+                  field_hash.Add(v, (iterator, closure_type))
+                | _ -> 
+                  index <- this.add_entry(v, t, Some(e.value)) 
+                  llvec.Add(t)
+                  field_hash.Add(v, (iterator, t))
           if index=0 then
             printfn "(%d,%d): TYPE ERROR: Multiple function arguments passed were assigned the variable name %s"
               e.line e.column (snd i.value)
             error <- true
+          iterator <- iterator + 1
+        
         if not(error) then
-          ////////////////////////////////let llist = Seq.toList llvec
-          ////////////////////////////////let expected_type = LLfun(llist, rt)
+          if not(this.clsmaps.ContainsKey(identifier)) then
+            this.clsmaps.Add(identifier,(this.current_frame,field_hash)) |> ignore
+          ///let llist = Seq.toList llvec
+          ///let expected_type = LLfun(llist, rt)
           let llist = Seq.toList llvec
-          ////////////////////////////should I add the index to the identifier
+          ///////////////////////should I add the index to the identifier???
           let c_name = sprintf "%s_%d" identifier this.global_index
           let expected_type = LLclosure(llist, rt, c_name)
           let gi = this.add_entry(identifier, expected_type, Some(expression.value), this.current_frame)
@@ -259,7 +284,7 @@ type SymbolTable =  // wrapping structure for symbol table frames
           else 
             let etype = this.infer_type(e)
             if rt=etype || (rt=LLunknown && grounded_type(etype)) then
-              /////////////////////////////////let success = this.set_type(identifier, 0, LLfun(llist, etype)) 
+              ///let success = this.set_type(identifier, 0, LLfun(llist, etype)) 
               let success = this.set_type(identifier, 0, LLclosure(llist, etype, c_name)) 
               if not(success) then 0
               else this.global_index 
@@ -274,6 +299,19 @@ type SymbolTable =  // wrapping structure for symbol table frames
 
 
   member this.infer_type (expression:LBox<expr>) = 
+    (*let trace = 
+      match expression with
+        | Lbox(Define(_)) -> "Define"
+        | Lbox(TypedDefine(_)) -> "TypedDefine"
+        | Lbox(Var(_)) -> "Var"
+        | Lbox(TypedVar(_)) -> "TypedVar"
+        | Lbox(Lambda(_)) | Lbox(TypedLambda(_)) -> "Lambda/Typed"
+        | Lbox(Let(_)) -> "Let"
+        | Lbox(TypedLet(_)) -> "TypedLet"
+        | Lbox(Sequence(_)) | Lbox(Beginseq(_)) -> sprintf "Sequence/Begin :: %A" expression
+        | _ -> sprintf "OTHER::: %A" expression
+    printfn "%s" trace
+    *)
     //let (|Lbox|) (t:Stackitem<'AT>) =  Lbox(t.value);
     match expression with 
       | Lbox(Integer(_)) -> LLint
@@ -371,6 +409,7 @@ type SymbolTable =  // wrapping structure for symbol table frames
       | Lbox(Define(var,value)) ->
         let (_, identifier) = var.value
         match value.value with
+          ////////////if an element in l is a closure, check the exported func
           | TypedLambda(l,_,e) | Lambda(l,e) ->
             let rt = 
               match value.value with
@@ -437,6 +476,8 @@ type SymbolTable =  // wrapping structure for symbol table frames
                 let i = this.add_entry(identifier, t.Value, Some(expression.value))
                 if i = 0 then
                   this.overwrite_entry(identifier, t.Value, Some(expression.value)) |> ignore
+                //printfn "TEST:::: VTYPE FOR VAR %s IS %A"
+                  //identifier (this.get_type(identifier, 0))
                 this.get_type(identifier, 0)
               | _ ->
                 printfn "(%d,%d): TYPE ERROR: Assigned type %A for variable %s does not match value type %A"
@@ -652,20 +693,23 @@ type SymbolTable =  // wrapping structure for symbol table frames
             LLuntypable
           else rtype
       | Lbox(Export(s)) ->
-        let closure_type = this.get_type(s,0)
-        if closure_type = LLuntypable then
-          printfn "(%d,%d): TYPE ERROR: Exported type %s is either undefined or out of scope"
-            expression.line expression.column s
-          LLuntypable
-        else
-          match closure_type with
-            | LLclosure(_) -> 
-              this.exported.Add(s, closure_type) 
-              LLunit
-            | _ ->
-              printfn "(%d,%d): TYPE ERROR: Exported type %s is not a closure type"
-                expression.line expression.column s
-              LLuntypable
+        if this.exported.ContainsKey(s) then
+          LLunit
+        else 
+          let closure_type = this.get_type(s,0)
+          if closure_type = LLuntypable then
+            printfn "(%d,%d): TYPE ERROR: Exported type %s is either undefined or out of scope"
+              expression.line expression.column s
+            LLuntypable
+          else
+            match closure_type with
+              | LLclosure(_) -> 
+                this.exported.Add(s, closure_type) 
+                LLunit
+              | _ ->
+                printfn "(%d,%d): TYPE ERROR: Exported type %s is not a closure type"
+                  expression.line expression.column s
+                LLuntypable
       | _ -> 
         printfn "(%d,%d): TYPE ERROR: %A Expression is not currently supported"
           expression.line expression.column expression.value 
@@ -685,6 +729,7 @@ let symbol_table =
     global_index = 0;
     frame_hash = HashMap<(int*int),table_frame>();
     exported = HashMap<string, lltype>(); 
+    clsmaps = HashMap<string,(table_frame*HashMap<string,(int*lltype)>)>();
   }
 
 let makeSymbolTable = 
@@ -701,5 +746,6 @@ let makeSymbolTable =
       global_index = 0;
       frame_hash = HashMap<(int*int),table_frame>();
       exported = HashMap<string, lltype>(); 
+      clsmaps = HashMap<string,(table_frame*HashMap<string,(int*lltype)>)>();
     }
   symb_table

@@ -15,8 +15,8 @@
   (b amt)
 ))) //transfer
 (transfer myaccount youraccount 100.0)
-(display (myaccount 0.0)) (display "\n")
-(display (youraccount 0.0)) (display "\n")
+//(display (myaccount 0.0)) (display "\n")
+//(display (youraccount 0.0)) (display "\n")
 
 //(free myaccount)
 //(free youraccount)

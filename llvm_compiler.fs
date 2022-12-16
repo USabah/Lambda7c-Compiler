@@ -21,9 +21,6 @@ type LLVMCompiler =
     mutable lindex: int; // local counter, set to 0 prior to compiling functions
     mutable errors: bool;
     allocated_vars: HashSet<string>;
-    // maps each closure to its table frame and a hashmap that maps each field to its position and type 
-    // Hash(closure_name, (closure_frame, Hash(field, (pos, type))))
-    clsmaps: HashMap<string,(table_frame*HashMap<string,(int*LLVMtype)>)>; 
   } //LLVMCompiler
 
   member this.newid(str:string) = 
@@ -557,7 +554,6 @@ let new_skeleton(name:string) =
     lindex = 0;
     errors = false;
     allocated_vars = HashSet<string>();
-    clsmaps = HashMap<string,(table_frame*HashMap<string,(int*LLVMtype)>)>(); 
   }
 
 let llvm_compiler = new_skeleton("") 

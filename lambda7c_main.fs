@@ -35,6 +35,6 @@ if not(parser1.errors) then
   let lbox = new_stackitem("AxprList", result, 1, 1)
   let program_str = llvm_compiler.compile_program(lbox)
   if isSome program_str then
-    //write to test.ll
-    File.WriteAllText("test.ll", program_str.Value)
+    //write to output.ll
+    File.WriteAllText("output.ll", program_str.Value)
 
