@@ -1,0 +1,1 @@
+(define x (lambda (y:string) (display y))) (x "abc")

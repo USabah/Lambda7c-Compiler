@@ -41,7 +41,7 @@ type LLVMCompiler =
     match expr_t with
       | LLint -> Basic("i32")
       | LLfloat -> Basic("double")
-      //| LLstring -> 
+      | LLstring -> Pointer(Basic("i8")) 
       //| LList(a) -> Arr
       | LLclosure(_,_,identifier) -> Userstruct(identifier)
       | _ -> Void_t

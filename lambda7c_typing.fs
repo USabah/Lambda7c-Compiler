@@ -598,7 +598,7 @@ type SymbolTable =  // wrapping structure for symbol table frames
         LLint
       | Lbox(Sequence(Lbox(Var("free"))::args)) when args.Length=1 ->
         match args.[0] with
-          | Var(_) ->
+          | Lbox(Var(_)) ->
             let arg_type = this.infer_type(args.[0])
             match arg_type with
               | LLclosure(_) ->
