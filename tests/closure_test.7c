@@ -2,11 +2,11 @@
    (define balance init)
    (define transaction (lambda (amt:float) (setq balance (+ balance amt))))
    (export transaction)
-   transaction
+   (transaction)
 )))//makeaccount
 
 (define myaccount (make_account 100.0))
-(define youraccount (make_account(200.0)))
+(define youraccount (make_account 200.0 ))
 (display (myaccount 150.0))  (display "\n")
 (display (youraccount (~25.0))) (display "\n") // ~ is negation in scheme syntax
 
@@ -15,8 +15,8 @@
   (b amt)
 ))) //transfer
 (transfer myaccount youraccount 100.0)
-//(display (myaccount 0.0)) (display "\n")
-//(display (youraccount 0.0)) (display "\n")
+(display (myaccount 0.0)) (display "\n")
+(display (youraccount 0.0)) (display "\n")
 
 //(free myaccount)
 //(free youraccount)
