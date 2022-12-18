@@ -353,8 +353,6 @@ type LLVMCompiler =
         func.add_inst(cast_inst)
         //save each free variable in the allocated struct
         for kvpair in (snd this.symbol_table.clsmaps.[var]) do
-          printfn "IN FUNCTION %s" func.name
-          printfn "free variable %s" kvpair.Key
           //retrieve free variable
           let mutable gi = 0 
           let mutable struct_type = Userstruct(fun_identifier)
@@ -487,6 +485,28 @@ type LLVMCompiler =
         let r1 = this.newid("in")
         func.add_inst(Call(Some(r1),Basic("i32"),[],"lambda7c_cin",[]))
         Register(r1)
+      | Lbox(Sequence(Lbox(Var("free"))::args)) when args.Length=1 ->
+        //bitcast arg, then free
+        let dest = this.compile_expr(args.[0], func)
+        let var_name = 
+          match args.[0] with
+            | Lbox(Var(s)) -> s
+            | _ -> ""
+        let entry_opt = this.symbol_table.get_entry(var_name,0)
+        let entry = entry_opt.Value
+        let struct_name =
+          match entry with
+            | LambdaDef(l,_,_,_) ->
+              match l with
+                | LLclosure(_,_,n) -> n
+                | _ -> ""
+            | _ -> ""
+        let cast_reg = this.newid(struct_name)
+        let struct_type = Pointer(Userstruct(struct_name))
+        let cast_inst = Cast(cast_reg, "bitcast", struct_type, dest, Pointer(Basic("i8")))
+        func.add_inst(cast_inst)
+        func.add_inst(Call(None,Void_t,[],"free",[(Pointer(Basic("i8")), Register(cast_reg))]))
+        Novalue
       | Lbox(Sequence(Lbox(Var(func_name))::args as lb)) ->
         //printfn "FUNCTION APPLICATION %s" func_name
         //Function application OR return var
@@ -500,10 +520,8 @@ type LLVMCompiler =
                 | LLclosure(l,r,n) -> (l,r,Some(f),g,n)
                 | _ -> ([LLuntypable], LLuntypable, None, 0, "") //Should be unreachable...
             | SimpleDef(t,g,a) -> 
-              /////////////LLCLOSURE SHOULDN'T BE SIMPLE DEF, CHANGE IN TYPE CHECKER
               ([t], LLuntypable, None, 0, "") 
         if global_index = 0 then
-          ///////////CHANGE THE CASE FOR THIS FOR COMPILER AND TYPE CHECKER
           //return var
           let rt = typeList.[0]
           let t = 
@@ -540,10 +558,10 @@ type LLVMCompiler =
             //Add closure arg
             let llvm_arg_type = Pointer(Userstruct(func_identifier))
             //recursive case
-            
-            if (sprintf "%s_%d" func_name this.symbol_table.struct_ind.[func_name]) = func.name then 
-              let exp = Register("_self")
-              argtypeList <- (llvm_arg_type, exp)::argtypeList
+            if this.symbol_table.struct_ind.ContainsKey(func_name) && 
+              (sprintf "%s_%d" func_name this.symbol_table.struct_ind.[func_name]) = func.name then 
+                let exp = Register("_self")
+                argtypeList <- (llvm_arg_type, exp)::argtypeList
             else
               let mutable reg_closure_arg = sprintf "%s_%d" func_name global_index
               if func_name = (func_identifier.Substring(0,func_identifier.LastIndexOf("_"))) then

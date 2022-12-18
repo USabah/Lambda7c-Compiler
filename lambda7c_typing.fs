@@ -596,6 +596,21 @@ type SymbolTable =  // wrapping structure for symbol table frames
         else LLunit //since the loop may not run at all
       | Lbox(Sequence(Lbox(Var("getint"))::args)) when args.Length=0 ->
         LLint
+      | Lbox(Sequence(Lbox(Var("free"))::args)) when args.Length=1 ->
+        match args.[0] with
+          | Var(_) ->
+            let arg_type = this.infer_type(args.[0])
+            match arg_type with
+              | LLclosure(_) ->
+                LLunit
+              | _ -> 
+                printfn "(%d,%d): TYPE ERROR: Cannot deallocate memory for non closure type %A" 
+                  expression.line expression.column arg_type
+                LLuntypable
+          | _ ->
+            printfn "(%d,%d): TYPE ERROR: Memory can only be deallocated for expressions in the form of a variable" 
+              expression.line expression.column 
+            LLuntypable
       | Lbox(Sequence((Lbox(Var(func_name)) as var_box)::args)) ->
         //Function Application or Return Value
         //check if LambdaDef or SimpleDef

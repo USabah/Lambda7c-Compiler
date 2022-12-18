@@ -12,6 +12,7 @@ while (x<10) {
   print("\n");
   x = x+1;
 }//while x
+*/
 
 (define x 1)
 (define y 0)
@@ -22,6 +23,7 @@ while (x<10) {
       (if (< (* x y) 10) (display "   ") (display "  "))
       (setq y (+ y 1))
    ))
+   (display "\n")
    (setq x (+ x 1))
 ))
 
