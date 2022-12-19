@@ -7,72 +7,56 @@ declare void @lambda7c_printstr(i8*)
 declare void @lambda7c_newline()
 declare i32 @lambda7c_cin()
 declare void @check_index(i32, i32, i32)
-%struct.area_5 = type { double }
-%struct.intelligence_test_9 = type { %struct.area_5*, double }
-%struct.mymain_1 = type {  }
-define double @area_5(double %farg_radius_25, %struct.area_5* %_self) {
+%struct.f_2 = type { i32 }
+%struct.g_6 = type { %struct.f_2*, i32 }
+define i32 @f_2(i32 %farg_y_10, %struct.f_2* %_self) {
 beginfun:
-%radius_25 = alloca double
-store double %farg_radius_25, double* %radius_25
-%radius_25_1 = load double, double* %radius_25
-%radius_25_2 = load double, double* %radius_25
-%pi_17_3 = getelementptr inbounds %struct.area_5, %struct.area_5* %_self, i32 0, i32 0
-%pi_17_4 = load double, double* %pi_17_3
-%r_5 = fmul double %radius_25_2, %pi_17_4
-%r_6 = fmul double %radius_25_1, %r_5
-ret double %r_6
+%y_10 = alloca i32
+store i32 %farg_y_10, i32* %y_10
+%y_10_1 = load i32, i32* %y_10
+%x_1_2 = getelementptr inbounds %struct.f_2, %struct.f_2* %_self, i32 0, i32 0
+%x_1_3 = load i32, i32* %x_1_2
+%r_4 = add i32 %y_10_1, %x_1_3
+ret i32 %r_4
 }
-define void @intelligence_test_9(double %farg_x_27, %struct.intelligence_test_9* %_self) {
+define i32 @g_6(i32 %farg_y_12, %struct.g_6* %_self) {
 beginfun:
-%x_27 = alloca double
-store double %farg_x_27, double* %x_27
-%area_5 = getelementptr inbounds %struct.intelligence_test_9, %struct.intelligence_test_9* %_self, i32 0, i32 0
-%area_5_1 = alloca %struct.area_5**
-store %struct.area_5** %area_5, %struct.area_5*** %area_5_1
-%z_15_11 = getelementptr inbounds %struct.intelligence_test_9, %struct.intelligence_test_9* %_self, i32 0, i32 1
-%z_15_12 = load double, double* %z_15_11
-%pi_29 = alloca double
-store double %z_15_12, double* %pi_29
-%area_5_13 = load %struct.area_5*, %struct.area_5** %area_5
-%x_27_14 = load double, double* %x_27
-%r_15 = call double @area_5(double %x_27_14, %struct.area_5* %area_5_13)
-call void @lambda7c_printfloat(double %r_15)
-ret void 
-}
-define void @mymain_1(double %farg_z_15, %struct.mymain_1* %_self) {
-beginfun:
-%z_15 = alloca double
-store double %farg_z_15, double* %z_15
-%pi_17 = alloca double
-store double 3.1415927, double* %pi_17
-%area_5_7 = call i8* @malloc(i64 8)
-%area_5_8 = bitcast i8* %area_5_7 to %struct.area_5*
-%pi_17_9 = getelementptr inbounds %struct.area_5, %struct.area_5* %area_5_8, i32 0, i32 0
-%pi_17_10 = load double, double* %pi_17
-store double %pi_17_10, double* %pi_17_9
-%area_5 = alloca %struct.area_5*
-store %struct.area_5* %area_5_8, %struct.area_5** %area_5
-%intelligence_test_9_16 = call i8* @malloc(i64 16)
-%intelligence_test_9_17 = bitcast i8* %intelligence_test_9_16 to %struct.intelligence_test_9*
-%area_5_18 = getelementptr inbounds %struct.intelligence_test_9, %struct.intelligence_test_9* %intelligence_test_9_17, i32 0, i32 0
-%area_5_19 = load %struct.area_5*, %struct.area_5** %area_5
-store %struct.area_5* %area_5_19, %struct.area_5** %area_5_18
-%z_15_20 = getelementptr inbounds %struct.intelligence_test_9, %struct.intelligence_test_9* %intelligence_test_9_17, i32 0, i32 1
-%z_15_21 = load double, double* %z_15
-store double %z_15_21, double* %z_15_20
-%intelligence_test_9 = alloca %struct.intelligence_test_9*
-store %struct.intelligence_test_9* %intelligence_test_9_17, %struct.intelligence_test_9** %intelligence_test_9
-%intelligence_test_9_22 = load %struct.intelligence_test_9*, %struct.intelligence_test_9** %intelligence_test_9
-call void @intelligence_test_9(double 51.0, %struct.intelligence_test_9* %intelligence_test_9_22)
-ret void 
+%y_12 = alloca i32
+store i32 %farg_y_12, i32* %y_12
+%f_2 = getelementptr inbounds %struct.g_6, %struct.g_6* %_self, i32 0, i32 0
+%f_2_1 = alloca %struct.f_2**
+store %struct.f_2** %f_2, %struct.f_2*** %f_2_1
+%f_2_9 = load %struct.f_2*, %struct.f_2** %f_2
+%y_12_10 = load i32, i32* %y_12
+%r_11 = call i32 @f_2(i32 %y_12_10, %struct.f_2* %f_2_9)
+%x_1_12 = getelementptr inbounds %struct.g_6, %struct.g_6* %_self, i32 0, i32 1
+%x_1_13 = load i32, i32* %x_1_12
+%r_14 = add i32 %r_11, %x_1_13
+ret i32 %r_14
 }
 define i32 @main() {
 beginmain:
-%mymain_1_23 = call i8* @malloc(i64 0)
-%mymain_1_24 = bitcast i8* %mymain_1_23 to %struct.mymain_1*
-%mymain_1 = alloca %struct.mymain_1*
-store %struct.mymain_1* %mymain_1_24, %struct.mymain_1** %mymain_1
-%mymain_1_25 = load %struct.mymain_1*, %struct.mymain_1** %mymain_1
-call void @mymain_1(double 2.0, %struct.mymain_1* %mymain_1_25)
+%x_1 = alloca i32
+store i32 1, i32* %x_1
+%f_2_5 = call i8* @malloc(i64 8)
+%f_2_6 = bitcast i8* %f_2_5 to %struct.f_2*
+%x_1_7 = getelementptr inbounds %struct.f_2, %struct.f_2* %f_2_6, i32 0, i32 0
+%x_1_8 = load i32, i32* %x_1
+store i32 %x_1_8, i32* %x_1_7
+%f_2 = alloca %struct.f_2*
+store %struct.f_2* %f_2_6, %struct.f_2** %f_2
+%g_6_15 = call i8* @malloc(i64 16)
+%g_6_16 = bitcast i8* %g_6_15 to %struct.g_6*
+%f_2_17 = getelementptr inbounds %struct.g_6, %struct.g_6* %g_6_16, i32 0, i32 0
+%f_2_18 = load %struct.f_2*, %struct.f_2** %f_2
+store %struct.f_2* %f_2_18, %struct.f_2** %f_2_17
+%x_1_19 = getelementptr inbounds %struct.g_6, %struct.g_6* %g_6_16, i32 0, i32 1
+%x_1_20 = load i32, i32* %x_1
+store i32 %x_1_20, i32* %x_1_19
+%g_6 = alloca %struct.g_6*
+store %struct.g_6* %g_6_16, %struct.g_6** %g_6
+%g_6_21 = load %struct.g_6*, %struct.g_6** %g_6
+%r_22 = call i32 @g_6(i32 1, %struct.g_6* %g_6_21)
+call void @lambda7c_printint(i32 %r_22)
 ret i32 0
 }
