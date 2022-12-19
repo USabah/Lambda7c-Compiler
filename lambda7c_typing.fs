@@ -10,7 +10,7 @@ open Option
 //lltype Methods
 let rec grounded_type = function 
   | LLunknown | LLvar(_) | LLuntypable -> false
-  | LList(t) -> grounded_type t
+  | LLarray(t,_) -> grounded_type t
   | lltype.LLtuple(vs) -> List.forall grounded_type vs
   | LLclosure(args,rtype,_) -> List.forall grounded_type (rtype::args)
   | _ -> true
@@ -366,13 +366,14 @@ type SymbolTable =  // wrapping structure for symbol table frames
       | Lbox(Binop("cons",a,b)) ->
         let (atype,btype) = (this.infer_type(a), this.infer_type(b))
         let mutable inner_type = LLunknown
+        let mutable size = 0
         match btype with
-          | LList(LLint) -> inner_type <- LLint
-          | LList(LLfloat) -> inner_type <- LLfloat
-          | LList(LLstring) -> inner_type <- LLstring
+          | LLarray(LLint,s) -> inner_type <- LLint; size <- s
+          | LLarray(LLfloat,s) -> inner_type <- LLfloat; size <- s
+          | LLarray(LLstring,s) -> inner_type <- LLstring; size <- s
           | _ -> inner_type <- LLuntypable
         if inner_type = LLuntypable then
-          printfn "(%d,%d): TYPE ERROR: Operator expects type LList of atomic types, recieved type %A"
+          printfn "(%d,%d): TYPE ERROR: Operator expects type LLarray of atomic types, recieved type %A"
             b.line b.column btype
           LLuntypable
         else
@@ -380,7 +381,7 @@ type SymbolTable =  // wrapping structure for symbol table frames
             printfn "(%d,%d): TYPE ERROR: Value passed expected to match list type %A but recieved type %A"
               a.line a.column inner_type atype
             LLuntypable
-          else LList(inner_type) 
+          else LLarray(inner_type,size) 
       | Lbox(Binop("and",a,b)) | Lbox(Binop("or",a,b)) ->
         let (atype,btype) = (this.infer_type(a), this.infer_type(b))
         if atype=btype && (atype=LLint) then atype
@@ -398,19 +399,19 @@ type SymbolTable =  // wrapping structure for symbol table frames
       | Lbox(Uniop("car",l)) ->
         let ltype = this.infer_type(l)
         match ltype with
-          | LList(LLint) -> LLint
-          | LList(LLfloat) -> LLfloat
-          | LList(LLstring) -> LLstring
-          | _ -> printfn "(%d,%d): TYPE ERROR: Operator expects type LList, recieved type %A"
+          | LLarray(LLint,_) -> LLint
+          | LLarray(LLfloat,_) -> LLfloat
+          | LLarray(LLstring,_) -> LLstring
+          | _ -> printfn "(%d,%d): TYPE ERROR: Operator expects type LLarray, recieved type %A"
                    l.line l.column ltype
                  LLuntypable
       | Lbox(Uniop("cdr",l)) ->
         let ltype = this.infer_type(l)
         match ltype with
-          | LList(LLint) as t -> t
-          | LList(LLfloat) as t -> t
-          | LList(LLstring) as t -> t
-          | _ -> printfn "(%d,%d): TYPE ERROR: Operator expects type LList, recieved type %A"
+          | LLarray(LLint,_) as t -> t
+          | LLarray(LLfloat,_) as t -> t
+          | LLarray(LLstring,_) as t -> t
+          | _ -> printfn "(%d,%d): TYPE ERROR: Operator expects type LLarray, recieved type %A"
                    l.line l.column ltype
                  LLuntypable
       | Lbox(Uniop("~",a)) ->
@@ -434,6 +435,76 @@ type SymbolTable =  // wrapping structure for symbol table frames
             expression.line expression.column var
           ltype
         else ltype 
+      | Lbox(Define(Lbox(_,var),Lbox(Vector(l)))) 
+      | Lbox(TypedDefine(Lbox(_,var),Lbox(Vector(l)))) ->
+        let size = l.Length
+        let (expected_type, expected_size) =
+          match expression with
+            | Lbox(Define(_)) -> (LLunknown,size)
+            | Lbox(TypedDefine(Lbox(Some(LLarray(t,-1)),_),_)) -> (t,size)
+            | Lbox(TypedDefine(Lbox(Some(LLarray(t,s)),_),_)) -> (t,s)
+            | _ -> (LLuntypable, -1)
+        let mutable etype = LLunknown
+        if l.Length > 0 then
+          etype <- this.infer_type(l.[0])
+          if etype=LLuntypable then
+            printfn "(%d,%d): TYPE ERROR: Could not infer type of expression for Vector"
+              l.[0].line l.[0].column
+            LLuntypable
+          else if etype <> expected_type && expected_type <> LLunknown then
+            printfn "(%d,%d): TYPE ERROR: Assigned type %A for Vector %s doesn't match the inferred type %A"
+              l.[0].line l.[0].column expected_type var etype
+            LLuntypable
+          else if size <> expected_size then
+            printfn "(%d,%d): TYPE ERROR: Assigned size %d for Vector %s doesn't equal the actual size of the vector, which is %d"
+              l.[0].line l.[0].column expected_size var size
+            LLuntypable
+          else
+            let mutable itype = LLunknown
+            let mutable error = false
+            for i in 1..size-1 do
+              itype <- this.infer_type(l.[i])
+              if itype <> etype then
+                error <- true
+            if error then 
+              printfn "(%d,%d): TYPE ERROR: All values in a vector must be of the same type. Types %A and %A were passed"
+                l.[0].line l.[0].column etype itype
+              LLuntypable
+            else 
+              LLarray(etype, size)
+        else
+          printfn "(%d,%d): TYPE ERROR: Vector cannot be defined with size 0." 
+            expression.line expression.column
+          LLuntypable
+      | Lbox(Define(Lbox(_,var),Lbox(VectorMake(e1,e2)))) 
+      | Lbox(TypedDefine(Lbox(_,var),Lbox(VectorMake(e1,e2)))) ->
+        let (e1type, e2type) = (this.infer_type(e1),this.infer_type(e2))
+        let (expected_type, expected_size) =
+          match expression with
+            | Lbox(Define(_)) -> (LLunknown,-1)
+            | Lbox(TypedDefine(Lbox(Some(LLarray(t,s)),_),_)) -> (t,s)
+            | _ -> (LLuntypable, -1)
+        if e2type <> LLint then
+          printfn "(%d,%d): TYPE ERROR: The last argument of vmake should be its size (type LLint). Type %A was passed"
+            e2.line e2.column e2type
+          LLuntypable
+        else if e1type<>LLstring && not(numerical e1type) then
+          printfn "(%d,%d): TYPE ERROR: Vectors can only contain atomic types (int/string/float). Type %A was passed"
+            e1.line e1.column e1type
+          LLuntypable
+        else
+          let vtype = LLarray(e1type, expected_size) //MUST CHECK SIZE IN COMPILE TIME
+          let i = this.add_entry(var, vtype, Some(expression.value))
+          if i = 0 then
+            let entry_type = this.get_type(var,0)
+            if entry_type = vtype then
+              this.overwrite_entry(var, vtype, Some(expression.value)) |> ignore
+              vtype
+            else
+              printfn "(%d,%d): TYPE ERROR: Cannot overwrite variable %s which has type %A with type %A"
+                expression.line expression.column var entry_type vtype
+              LLuntypable
+          else vtype
       | Lbox(Define(var,value)) ->
         let (_, identifier) = var.value
         match value.value with
@@ -464,13 +535,23 @@ type SymbolTable =  // wrapping structure for symbol table frames
                 | _ -> ()
               let i = this.add_entry(identifier, inferred_type, Some(expression.value), frame)
               //define should be able to overwrite previously defined entries
+              let mutable error = false
               if i = 0 then //destructive assignment 
-                this.overwrite_entry(identifier, inferred_type, Some(expression.value), frame) |> ignore
-              let old_entry = this.get_entry(identifier, 0)
-              this.set_index(identifier, gi) |> ignore
-              //printfn "(%d,%d) TEST: INFERRED TYPE %A FOR VARIABLE %s"
-                //expression.line expression.column (this.get_type(identifier, 0)) identifier
-              this.get_type(identifier, 0) 
+                let entry_type = this.get_type(identifier,0)
+                if entry_type = inferred_type then
+                  this.overwrite_entry(identifier, inferred_type, Some(expression.value), frame) |> ignore
+                else
+                  error <- true
+                  printfn "(%d,%d): TYPE ERROR: Cannot overwrite variable %s which has type %A with type %A"
+                    expression.line expression.column identifier entry_type inferred_type
+              if error then
+                LLuntypable
+              else
+                let old_entry = this.get_entry(identifier, 0)
+                this.set_index(identifier, gi) |> ignore
+                //printfn "(%d,%d) TEST: INFERRED TYPE %A FOR VARIABLE %s"
+                  //expression.line expression.column (this.get_type(identifier, 0)) identifier
+                this.get_type(identifier, 0) 
           | _ -> 
             let vtype = this.infer_type(value)
             if grounded_type(vtype) then
@@ -482,14 +563,23 @@ type SymbolTable =  // wrapping structure for symbol table frames
                   isClosure <- true
                 | _ ->
                   i <- this.add_entry(identifier, vtype, Some(expression.value))
-              if i = 0 then
-                if isClosure then
-                  this.overwrite_entry(identifier, vtype, Some(expression.value), this.current_frame) |> ignore
+              let mutable error = false
+              if i = 0 then //destructive assignment 
+                let entry_type = this.get_type(identifier,0)
+                if entry_type = vtype then
+                  if isClosure then
+                    this.overwrite_entry(identifier, vtype, Some(expression.value), this.current_frame) |> ignore
+                  else
+                    this.overwrite_entry(identifier, vtype, Some(expression.value)) |> ignore
                 else
-                  this.overwrite_entry(identifier, vtype, Some(expression.value)) |> ignore
-              //printfn "(%d,%d) TEST: INFERRED TYPE %A FOR VARIABLE %s"
-                //expression.line expression.column (this.get_type(identifier, 0)) identifier
-              this.get_type(identifier, 0)
+                  printfn "(%d,%d): TYPE ERROR: Cannot overwrite variable %s which has type %A with type %A"
+                    expression.line expression.column identifier entry_type vtype 
+                  error <- true
+              if error then LLuntypable
+              else
+                //printfn "(%d,%d) TEST: INFERRED TYPE %A FOR VARIABLE %s"
+                  //expression.line expression.column (this.get_type(identifier, 0)) identifier
+                this.get_type(identifier, 0)
             else
               printfn "(%d,%d): TYPE ERROR: Type of expression for variable %s cannot be inferred"
                 value.line value.column identifier
@@ -499,23 +589,40 @@ type SymbolTable =  // wrapping structure for symbol table frames
           let vtype = this.infer_type(value)
           if vtype=t.Value then
             let i = this.add_entry(identifier, vtype, Some(expression.value))
-            if i = 0 then
-              this.overwrite_entry(identifier, vtype, Some(expression.value)) |> ignore
-            this.get_type(identifier, 0)
+            let mutable error = false
+            if i = 0 then //destructive assignment 
+              let entry_type = this.get_type(identifier,0)
+              if entry_type = vtype then
+                this.overwrite_entry(identifier, vtype, Some(expression.value)) |> ignore
+              else
+                error <- true
+                printfn "(%d,%d): TYPE ERROR: Cannot overwrite variable %s which has type %A with type %A"
+                  expression.line expression.column identifier entry_type vtype
+            if error then LLuntypable
+            else this.get_type(identifier, 0)
           else 
             //case where value is [] or closure
             let inner_type = 
               match t.Value with
-                | LList(x) | LLclosure(_,x,_) -> x 
+                | LLarray(x,_) | LLclosure(_,x,_) -> x 
                 | _ -> LLuntypable
             match vtype with
-              | LList(LLunknown) | LLclosure(_,LLunknown,_) ->
+              | LLarray(LLunknown,_) | LLclosure(_,LLunknown,_) ->
                 let i = this.add_entry(identifier, t.Value, Some(expression.value), this.current_frame)
-                if i = 0 then
-                  this.overwrite_entry(identifier, t.Value, Some(expression.value), this.current_frame) |> ignore
-                //printfn "TEST:::: VTYPE FOR VAR %s IS %A"
-                  //identifier (this.get_type(identifier, 0))
-                this.get_type(identifier, 0)
+                let mutable error = false
+                if i = 0 then //destructive assignment 
+                  let entry_type = this.get_type(identifier,0)
+                  if entry_type = t.Value then
+                    this.overwrite_entry(identifier, t.Value, Some(expression.value), this.current_frame) |> ignore
+                  else
+                    error <- true
+                    printfn "(%d,%d): TYPE ERROR: Cannot overwrite variable %s which has type %A with type %A"
+                      expression.line expression.column identifier entry_type t.Value
+                if error then LLuntypable
+                else 
+                  //printfn "TEST:::: VTYPE FOR VAR %s IS %A"
+                    //identifier (this.get_type(identifier, 0))
+                  this.get_type(identifier, 0)
               | _ ->
                 printfn "(%d,%d): TYPE ERROR: Assigned type %A for variable %s does not match value type %A"
                   value.line value.column t.Value identifier vtype
@@ -678,27 +785,6 @@ type SymbolTable =  // wrapping structure for symbol table frames
             LLuntypable
           else 
             vartype 
-      | Lbox(Vector(vl)) ->
-        let mutable etype = LLunknown
-        if vl.Length > 0 then
-          etype <- this.infer_type(vl.[0])
-          if etype=LLuntypable then
-            printfn "(%d,%d): TYPE ERROR: Could not infer type of expression for Vector"
-              vl.[0].line vl.[0].column
-            LLuntypable
-          else
-            let mutable itype = LLunknown
-            let mutable error = false
-            for i in 1..vl.Length-1 do
-              itype <- this.infer_type(vl.[i])
-              if itype <> etype then
-                error <- true
-            if error then 
-              printfn "(%d,%d): TYPE ERROR: All values in a vector must be of the same type. Types %A and %A were passed"
-                vl.[0].line vl.[0].column etype itype
-              LLuntypable
-            else LList(etype) 
-        else LList(etype)
       | Lbox(VectorSetq(v,i,e)) ->
         let (itype,vtype,etype) = (this.infer_type(i), this.infer_type(v), this.infer_type(e))
         if itype <> LLint then
@@ -708,7 +794,7 @@ type SymbolTable =  // wrapping structure for symbol table frames
         else 
           let rtype = 
             match vtype with
-              | LList(atomic_type) -> atomic_type
+              | LLarray(atomic_type,_) -> atomic_type
               | _ -> LLuntypable
           if rtype = LLuntypable then
             printfn "(%d,%d): TYPE ERROR: Cannot infer type of vector. Type %A was passed as an index"
@@ -720,18 +806,21 @@ type SymbolTable =  // wrapping structure for symbol table frames
                 e.line e.column etype
               LLuntypable
             else LLunit
+      (* /////may not be necessary
       | Lbox(VectorMake(e1,e2)) ->
         let (e1type, e2type) = (this.infer_type(e1),this.infer_type(e2))
-        if e1type <> e2type then
-          printfn "(%d,%d): TYPE ERROR: vmake expects two arguments of the same type. Types %A and %A were passed"
-            expression.line expression.column e1type e2type
+        if e2type <> LLint then
+          printfn "(%d,%d): TYPE ERROR: The last argument of vmake should be its size (type LLint). Type %A was passed"
+            e2.line e2.column e2type
           LLuntypable
         else if e1type<>LLstring && not(numerical e1type) then
           printfn "(%d,%d): TYPE ERROR: Vectors can only contain atomic types (int/string/float). Type %A was passed"
-            expression.line expression.column e1type
+            e1.line e1.column e1type
           LLuntypable
         else
-          LList(e1type)
+          LLarray(e1type, _)
+      *)
+      
       | Lbox(VectorGet(v,i)) ->
         let (itype,vtype) = (this.infer_type(i), this.infer_type(v))
         if itype <> LLint then
@@ -741,7 +830,7 @@ type SymbolTable =  // wrapping structure for symbol table frames
         else 
           let rtype = 
             match vtype with
-              | LList(atomic_type) -> atomic_type
+              | LLarray(atomic_type,_) -> atomic_type
               | _ -> LLuntypable
           if rtype = LLuntypable then
             printfn "(%d,%d): TYPE ERROR: Cannot infer type of vector. Type %A was passed as an index"

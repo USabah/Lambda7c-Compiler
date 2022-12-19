@@ -392,6 +392,21 @@ type LLVMCompiler =
         func.add_inst(store_inst)
         Register(fun_identifier)
      
+      | Lbox(Define(Lbox(_,var),Lbox(Vector(l)))) 
+      | Lbox(TypedDefine(Lbox(_,var),Lbox(Vector(l)))) ->
+        printfn "EXPRESSION: %A" expression
+        printfn "(%d,%d): COMPILER ERROR: Expression is not yet supported by the compiler"
+          expression.line expression.column
+        this.errors <- true
+        Novalue
+      | Lbox(Define(Lbox(_,var),Lbox(VectorMake(e1,e2))))
+      | Lbox(TypedDefine(Lbox(_,var),Lbox(VectorMake(e1,e2)))) ->
+        printfn "EXPRESSION: %A" expression
+        printfn "(%d,%d): COMPILER ERROR: Expression is not yet supported by the compiler"
+          expression.line expression.column
+        this.errors <- true
+        Novalue
+
       | Lbox(Define(Lbox(_,var), value)) | Lbox(TypedDefine(Lbox(_,var), value))
       | Lbox(Setq(Lbox(var), value)) ->
         //printfn "IN DEFINE/SETQ for %s" var

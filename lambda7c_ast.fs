@@ -40,13 +40,14 @@ type expr =
   | Label of string   // not a proper expression - just a temporary
   | StrList of LBox<lltype option*string> list //Intermediate Addition
   | Export of string
+  | Sizeopt of expr option
   | Error
   //  | Continuation of (expr -> expr)    // don't need
 
 and lltype =  // abstract syntax for type expressions
   | LLint | LLfloat | LLstring
   | LList of lltype | LLtuple of lltype list
-  | LLfun of (lltype list)*lltype
+  | LLarray of lltype*int | LLfun of (lltype list)*lltype
   | LLclosure of (lltype list)*lltype*string
   | LLunknown | LLuntypable | LLvar of string | LLunit
 
@@ -193,13 +194,21 @@ Gmr.production("Txpr --> string", fun r -> TypeExpr(LLstring))
 
 //Txpr --> LBRACE Txpr Sizeopt RBRACE
 Gmr.production("Txpr --> LBRACE Txpr Sizeopt RBRACE", fun rhs -> 
-  match rhs.[1].value with
-    | TypeExpr(t) -> TypeExpr(LList(t))
+  match (rhs.[1].value, rhs.[2].value) with
+    | (TypeExpr(t),Sizeopt(Some(Integer(size)))) -> 
+      (*if size <= 0 then
+        printfn "PARSING ERROR line %d column %d, %s"
+          (rhs.[2].line) (rhs.[2].column) "Vector cannot be instantiated with size <= 0."
+        Error
+      else*)
+      TypeExpr(LLarray(t,size))
+    | (TypeExpr(t),Sizeopt(None)) -> 
+      TypeExpr(LLarray(t,-1))
     | _ -> Error
 )
 
-Gmr.production("Sizeopt --> INT", fun rhs -> rhs.[0].value)
-Gmr.production("Sizeopt --> ", fun rhs -> Integer(0))
+Gmr.production("Sizeopt --> INT", fun rhs -> Sizeopt(Some(rhs.[0].value)))
+Gmr.production("Sizeopt --> ", fun rhs -> Sizeopt(None))
 
 Gmr.production("Txpr --> LBRACK VAR RBRACK", fun rhs ->
   match rhs.[1].value with
