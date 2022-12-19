@@ -711,6 +711,7 @@ type LLVMCompiler =
         gdecVec.Add(Externfunc(Void_t, "lambda7c_printstr", Vec<LLVMtype>([Pointer(Basic("i8"))])))
         gdecVec.Add(Externfunc(Void_t, "lambda7c_newline", Vec<LLVMtype>()))
         gdecVec.Add(Externfunc(Basic("i32"), "lambda7c_cin", Vec<LLVMtype>()))
+        gdecVec.Add(Externfunc(Void_t, "check_index", Vec<LLVMtype>([Basic("i32");Basic("i32");Basic("i32")])))
         this.program.appendGD(gdecVec)
 
         //create a main function, but don't push onto program until end

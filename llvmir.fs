@@ -276,7 +276,7 @@ type Instruction =
         str
       | Arrayindex(reg, index, t, expr1, expr2) ->
         let arrstring = "[" + string(index) + " x " + type_string(t) + "]"
-        str <- "%" + reg + " = getelementptr inbounds " + arrstring + ", " + arrstring + "* " + expr_string(expr1) + ", i64 0, i64 " + expr_string(expr2)
+        str <- "%" + reg + " = getelementptr inbounds " + arrstring + ", " + arrstring + "* " + expr_string(expr1) + ", i64 0, i32 " + expr_string(expr2)
         str
       | Structfield(reg, t, expr1, expr2) ->
         let t_str = type_string(t)

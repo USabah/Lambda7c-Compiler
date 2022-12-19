@@ -518,7 +518,7 @@ type SymbolTable =  // wrapping structure for symbol table frames
                 this.get_type(identifier, 0)
               | _ ->
                 printfn "(%d,%d): TYPE ERROR: Assigned type %A for variable %s does not match value type %A"
-                  value.line value.column vtype identifier (t.Value)
+                  value.line value.column t.Value identifier vtype
                 LLuntypable
       | Lbox(Let(var_tupl, value, e)) | Lbox(TypedLet(var_tupl, value, e)) -> 
         let (t, identifier) = var_tupl.value
