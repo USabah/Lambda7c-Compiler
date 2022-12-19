@@ -51,11 +51,8 @@ and lltype =  // abstract syntax for type expressions
   | LLunknown | LLuntypable | LLvar of string | LLunit
 
 
-// 2. Create a skeleton grammar with ast type and starting nonterminal (E)
-//let mutable Gmr = new_grammar<expr>("AxprList") 
 let mutable Gmr = new_grammar<expr>("Axprplus") 
 
-// 3. Define terminal and non-terminal symbols (lexer interface)
 let binops = ["+";"-";"*";"/";"%";"^";"=";"<";">";"<=";">=";"cons";"neq";"eq";"and";"or"]
 let uniops = ["~";"car";"cdr";"not";"display"]
 let keywords = ["export";"NIL";"int";"unit";"float";"string";"unit";"let";"define";"begin";"lambda";"while";"setq";"if"] 
@@ -79,12 +76,6 @@ Gmr.lexterminal("LBRACKEQ","<=")
 Gmr.lexterminal("RBRACKEQ",">=") 
 //Gmr.nonterminals(["Expr";"Seq";"Binop";"Uniop";"Axpr";"Axprplus";"Typeopt";"Txpr";"VarTypeopt";"Strlist";"Sval";"Seq"]);  // these are in addition to AxprList
 Gmr.nonterminals(["Expr";"Seq";"Binop";"Uniop";"Axpr";"AxprList";"Typeopt";"Txpr";"VarTypeopt";"Strlist";"Sval";"Seq"]);  // these are in addition to AxprList
-
-// 4. Create a lexical scanner for the language such as in the form of
-//    a .lex file.  We will just use the ready-made  ll1_lex.dll  here.
-
-// 5. Write a semantic action for each rule, and add productions with
-//    semantic actions to the grammar. *****
 
 let semact1 (rhs:Vec<Stackitem<expr>>) =  
   match (rhs.[0].value, rhs.[1].value) with
@@ -309,8 +300,6 @@ let semact10 (rhs:Vec<Stackitem<expr>>) =
 Gmr.production("Expr --> lambda LPAREN Strlist RPAREN Typeopt Axpr", semact10)
 
 
-// 6. Create options to generate parse table or load it from json:
-
 let mutable GENERATE = false
 let argv = Environment.GetCommandLineArgs();
 let mutable runfile = ""
@@ -332,5 +321,3 @@ if GENERATE then
 elif not(GENERATE) then
   parser1 <- load_parser_into(Gmr,"lambda7c_ast.json",null,false)
   if TRACE then (parser1.Gmr.printgrammar(); printfn "parser loaded")
-
-// 7. Create "main", possibly in a different file, and start parsing ...

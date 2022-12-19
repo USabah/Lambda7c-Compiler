@@ -32,7 +32,8 @@ else
     error <- true
 
 if not(error) then
-  printfn "Parsing File %s:" runfile
+  if runfile <> "" then
+    printfn "Parsing File %s:" runfile
   let result = parser1.parse()
   if not(parser1.errors) then
     printfn "AST Representation------------" 

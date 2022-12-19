@@ -6,72 +6,104 @@ declare void @lambda7c_printfloat(double)
 declare void @lambda7c_printstr(i8*)
 declare void @lambda7c_newline()
 declare i32 @lambda7c_cin()
-%struct.area_5 = type { double }
-%struct.intelligence_test_9 = type { %struct.area_5*, double }
-%struct.mymain_1 = type {  }
-define double @area_5(double %farg_radius_25, %struct.area_5* %_self) {
+%struct.transaction_5 = type { double }
+%struct.make_account_1 = type {  }
+@str_1 = constant [2 x i8] c"\0a\00"
+%struct.transfer_14 = type {  }
+define double @transaction_5(double %farg_amt_24, %struct.transaction_5* %_self) {
 beginfun:
-%radius_25 = alloca double
-store double %farg_radius_25, double* %radius_25
-%radius_25_1 = load double, double* %radius_25
-%radius_25_2 = load double, double* %radius_25
-%pi_17_3 = getelementptr inbounds %struct.area_5, %struct.area_5* %_self, i32 0, i32 0
-%pi_17_4 = load double, double* %pi_17_3
-%r_5 = fmul double %radius_25_2, %pi_17_4
-%r_6 = fmul double %radius_25_1, %r_5
-ret double %r_6
+%amt_24 = alloca double
+store double %farg_amt_24, double* %amt_24
+%balance_20 = getelementptr inbounds %struct.transaction_5, %struct.transaction_5* %_self, i32 0, i32 0
+%balance_20_2 = getelementptr inbounds %struct.transaction_5, %struct.transaction_5* %_self, i32 0, i32 0
+%balance_20_3 = load double, double* %balance_20_2
+%amt_24_4 = load double, double* %amt_24
+%r_5 = fadd double %balance_20_3, %amt_24_4
+store double %r_5, double* %balance_20
+ret double %r_5
 }
-define void @intelligence_test_9(double %farg_x_27, %struct.intelligence_test_9* %_self) {
+define %struct.transaction_5* @make_account_1(double %farg_init_18, %struct.make_account_1* %_self) {
 beginfun:
-%x_27 = alloca double
-store double %farg_x_27, double* %x_27
-%area_5 = getelementptr inbounds %struct.intelligence_test_9, %struct.intelligence_test_9* %_self, i32 0, i32 0
-%area_5_1 = alloca %struct.area_5**
-store %struct.area_5** %area_5, %struct.area_5*** %area_5_1
-%z_15_11 = getelementptr inbounds %struct.intelligence_test_9, %struct.intelligence_test_9* %_self, i32 0, i32 1
-%z_15_12 = load double, double* %z_15_11
-%pi_29 = alloca double
-store double %z_15_12, double* %pi_29
-%area_5_13 = load %struct.area_5*, %struct.area_5** %area_5
-%x_27_14 = load double, double* %x_27
-%r_15 = call double @area_5(double %x_27_14, %struct.area_5* %area_5_13)
-call void @lambda7c_printfloat(double %r_15)
-ret void 
+%init_18 = alloca double
+store double %farg_init_18, double* %init_18
+%init_18_1 = load double, double* %init_18
+%balance_20 = alloca double
+store double %init_18_1, double* %balance_20
+%transaction_5_6 = call i8* @malloc(i64 8)
+%transaction_5_7 = bitcast i8* %transaction_5_6 to %struct.transaction_5*
+%balance_20_8 = getelementptr inbounds %struct.transaction_5, %struct.transaction_5* %transaction_5_7, i32 0, i32 0
+%balance_20_9 = load double, double* %balance_20
+store double %balance_20_9, double* %balance_20_8
+%transaction_5 = alloca %struct.transaction_5*
+store %struct.transaction_5* %transaction_5_7, %struct.transaction_5** %transaction_5
+%transaction_5_10 = load %struct.transaction_5*, %struct.transaction_5** %transaction_5
+ret %struct.transaction_5* %transaction_5_10
 }
-define void @mymain_1(double %farg_z_15, %struct.mymain_1* %_self) {
+define double @transfer_14(%struct.transaction_5* %farg_a_26, %struct.transaction_5* %farg_b_27, double %farg_amt_28, %struct.transfer_14* %_self) {
 beginfun:
-%z_15 = alloca double
-store double %farg_z_15, double* %z_15
-%pi_17 = alloca double
-store double 3.1415927, double* %pi_17
-%area_5_7 = call i8* @malloc(i64 8)
-%area_5_8 = bitcast i8* %area_5_7 to %struct.area_5*
-%pi_17_9 = getelementptr inbounds %struct.area_5, %struct.area_5* %area_5_8, i32 0, i32 0
-%pi_17_10 = load double, double* %pi_17
-store double %pi_17_10, double* %pi_17_9
-%area_5 = alloca %struct.area_5*
-store %struct.area_5* %area_5_8, %struct.area_5** %area_5
-%intelligence_test_9_16 = call i8* @malloc(i64 16)
-%intelligence_test_9_17 = bitcast i8* %intelligence_test_9_16 to %struct.intelligence_test_9*
-%area_5_18 = getelementptr inbounds %struct.intelligence_test_9, %struct.intelligence_test_9* %intelligence_test_9_17, i32 0, i32 0
-%area_5_19 = load %struct.area_5*, %struct.area_5** %area_5
-store %struct.area_5* %area_5_19, %struct.area_5** %area_5_18
-%z_15_20 = getelementptr inbounds %struct.intelligence_test_9, %struct.intelligence_test_9* %intelligence_test_9_17, i32 0, i32 1
-%z_15_21 = load double, double* %z_15
-store double %z_15_21, double* %z_15_20
-%intelligence_test_9 = alloca %struct.intelligence_test_9*
-store %struct.intelligence_test_9* %intelligence_test_9_17, %struct.intelligence_test_9** %intelligence_test_9
-%intelligence_test_9_22 = load %struct.intelligence_test_9*, %struct.intelligence_test_9** %intelligence_test_9
-call void @intelligence_test_9(double 51.0, %struct.intelligence_test_9* %intelligence_test_9_22)
-ret void 
+%a_26 = alloca %struct.transaction_5*
+store %struct.transaction_5* %farg_a_26, %struct.transaction_5** %a_26
+%b_27 = alloca %struct.transaction_5*
+store %struct.transaction_5* %farg_b_27, %struct.transaction_5** %b_27
+%amt_28 = alloca double
+store double %farg_amt_28, double* %amt_28
+%a_26_24 = load %struct.transaction_5*, %struct.transaction_5** %a_26
+%amt_28_25 = load double, double* %amt_28
+%r_26 = fneg double %amt_28_25
+%r_27 = call double @transaction_5(double %r_26, %struct.transaction_5* %a_26_24)
+%b_27_28 = load %struct.transaction_5*, %struct.transaction_5** %b_27
+%amt_28_29 = load double, double* %amt_28
+%r_30 = call double @transaction_5(double %amt_28_29, %struct.transaction_5* %b_27_28)
+ret double %r_30
 }
 define i32 @main() {
 beginmain:
-%mymain_1_23 = call i8* @malloc(i64 0)
-%mymain_1_24 = bitcast i8* %mymain_1_23 to %struct.mymain_1*
-%mymain_1 = alloca %struct.mymain_1*
-store %struct.mymain_1* %mymain_1_24, %struct.mymain_1** %mymain_1
-%mymain_1_25 = load %struct.mymain_1*, %struct.mymain_1** %mymain_1
-call void @mymain_1(double 2.0, %struct.mymain_1* %mymain_1_25)
+%make_account_1_11 = call i8* @malloc(i64 0)
+%make_account_1_12 = bitcast i8* %make_account_1_11 to %struct.make_account_1*
+%make_account_1 = alloca %struct.make_account_1*
+store %struct.make_account_1* %make_account_1_12, %struct.make_account_1** %make_account_1
+%make_account_1_13 = load %struct.make_account_1*, %struct.make_account_1** %make_account_1
+%r_14 = call %struct.transaction_5* @make_account_1(double 100.0, %struct.make_account_1* %make_account_1_13)
+%myaccount_10 = alloca %struct.transaction_5*
+store %struct.transaction_5* %r_14, %struct.transaction_5** %myaccount_10
+%make_account_1_15 = load %struct.make_account_1*, %struct.make_account_1** %make_account_1
+%r_16 = call %struct.transaction_5* @make_account_1(double 200.0, %struct.make_account_1* %make_account_1_15)
+%youraccount_11 = alloca %struct.transaction_5*
+store %struct.transaction_5* %r_16, %struct.transaction_5** %youraccount_11
+%myaccount_10_17 = load %struct.transaction_5*, %struct.transaction_5** %myaccount_10
+%r_18 = call double @transaction_5(double 150.0, %struct.transaction_5* %myaccount_10_17)
+call void @lambda7c_printfloat(double %r_18)
+%r_19 = getelementptr inbounds [2 x i8], [2 x i8]* @str_1, i64 0, i64 0
+call void @lambda7c_printstr(i8* %r_19)
+%youraccount_11_20 = load %struct.transaction_5*, %struct.transaction_5** %youraccount_11
+%r_21 = fneg double 25.0
+%r_22 = call double @transaction_5(double %r_21, %struct.transaction_5* %youraccount_11_20)
+call void @lambda7c_printfloat(double %r_22)
+%r_23 = getelementptr inbounds [2 x i8], [2 x i8]* @str_1, i64 0, i64 0
+call void @lambda7c_printstr(i8* %r_23)
+%transfer_14_31 = call i8* @malloc(i64 0)
+%transfer_14_32 = bitcast i8* %transfer_14_31 to %struct.transfer_14*
+%transfer_14 = alloca %struct.transfer_14*
+store %struct.transfer_14* %transfer_14_32, %struct.transfer_14** %transfer_14
+%transfer_14_33 = load %struct.transfer_14*, %struct.transfer_14** %transfer_14
+%youraccount_11_34 = load %struct.transaction_5*, %struct.transaction_5** %youraccount_11
+%myaccount_10_35 = load %struct.transaction_5*, %struct.transaction_5** %myaccount_10
+%r_36 = call double @transfer_14(%struct.transaction_5* %myaccount_10_35, %struct.transaction_5* %youraccount_11_34, double 100.0, %struct.transfer_14* %transfer_14_33)
+%myaccount_10_37 = load %struct.transaction_5*, %struct.transaction_5** %myaccount_10
+%r_38 = call double @transaction_5(double 0.0, %struct.transaction_5* %myaccount_10_37)
+call void @lambda7c_printfloat(double %r_38)
+%r_39 = getelementptr inbounds [2 x i8], [2 x i8]* @str_1, i64 0, i64 0
+call void @lambda7c_printstr(i8* %r_39)
+%youraccount_11_40 = load %struct.transaction_5*, %struct.transaction_5** %youraccount_11
+%r_41 = call double @transaction_5(double 0.0, %struct.transaction_5* %youraccount_11_40)
+call void @lambda7c_printfloat(double %r_41)
+%r_42 = getelementptr inbounds [2 x i8], [2 x i8]* @str_1, i64 0, i64 0
+call void @lambda7c_printstr(i8* %r_42)
+%myaccount_10_43 = load %struct.transaction_5*, %struct.transaction_5** %myaccount_10
+%transaction_5_44 = bitcast %struct.transaction_5* %myaccount_10_43 to i8*
+call void @free(i8* %transaction_5_44)
+%youraccount_11_45 = load %struct.transaction_5*, %struct.transaction_5** %youraccount_11
+%transaction_5_46 = bitcast %struct.transaction_5* %youraccount_11_45 to i8*
+call void @free(i8* %transaction_5_46)
 ret i32 0
 }

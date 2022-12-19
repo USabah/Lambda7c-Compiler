@@ -4,11 +4,7 @@ open System.IO;
 open System.Collections.Generic;
 open Json
 
-// This is an updated version of recless_skeleton. RENAME this file to
-// recless.fs and compile to a .dll after you complete the Grammar.make_table
-// function.
-
-// It uses a Json parser built with Fussless and the same lexical scanner
+// uses a Json parser built with Fussless and the same lexical scanner
 // interface as Fussless
 
 //fsharpc -a recless.fs -r absLexer.dll -r jsonparser.dll -r json_lex.dll
@@ -168,7 +164,7 @@ type Grammar<'T> =
     Follow: HashMap<string,HashSet<string>>;
     First : HashMap<string,HashSet<string>>;
     Nullable : HashSet<string>;
-LL1Table : HashMap<string,HashMap<string,int>>;
+    LL1Table : HashMap<string,HashMap<string,int>>;
     valueterminals : HashMap<string,string*(string -> 'T)>;
     lexterminals: HashMap<string,string>; // maps ":" to "COLON"
   }
