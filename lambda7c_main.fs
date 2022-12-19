@@ -21,20 +21,27 @@ let runFileBased(filename) =
   //let lexer1 = lambda7clexer<unit>(lines);
   parser1.set_scanner lexer1;;
 
+let mutable error = false
+
 if runfile = "" then runInteractive()
 else 
+  try
+    runFileBased(runfile)
+  with _ ->
+    printfn "File %s was not found" runfile
+    error <- true
+
+if not(error) then
   printfn "Parsing File %s:" runfile
-  runFileBased(runfile)
-
-let result = parser1.parse()
-if not(parser1.errors) then
-  printfn "AST Representation------------" 
-  printfn "%A" (result)
+  let result = parser1.parse()
+  if not(parser1.errors) then
+    printfn "AST Representation------------" 
+    printfn "%A" (result)
+    
+    //wrap result in an LBox
+    let lbox = new_stackitem("AxprList", result, 1, 1)
+    let program_str = llvm_compiler.compile_program(lbox)
+    if isSome program_str then
+      //write to output.ll
+      File.WriteAllText("output.ll", program_str.Value)
   
-  //wrap result in an LBox
-  let lbox = new_stackitem("AxprList", result, 1, 1)
-  let program_str = llvm_compiler.compile_program(lbox)
-  if isSome program_str then
-    //write to output.ll
-    File.WriteAllText("output.ll", program_str.Value)
-

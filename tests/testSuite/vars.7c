@@ -8,10 +8,13 @@ let x = 2 in {
 */
 
 (define x 1)
-(define f (lambda (y:int):int (+ y x)))
-(let (x 2) (begin
-  (define g (lambda (y:int):int (+ (f y) x)))
-  (display (g 1))
+//(define f (lambda (y:int):int (+ y x)))
+(define f (lambda (y:int):int ((+ y x))))
+(define g (lambda (y:int):int (+ (f y) x)))
+(display (g 1))
+//(let (x 2) (begin
+  //(define g (lambda (y:int):int (+ (f y) x)))
+  //(display (g 1))
   //(display (+ (f 0) (g 0)))
-  ))
+  //))
 

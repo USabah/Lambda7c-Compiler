@@ -121,7 +121,6 @@ type LLVMCompiler =
       | Lbox(Uniop("display", exp)) ->
         //printfn "IN UNIOP"
         let dest = this.compile_expr(exp, func)
-        /////////RIGHT NOW, EXPTYPE IS RETURNING THE CLOSURE, BUT SHOULD IT RETURN THE CLOSURE OR THE VALUE?
         let mutable exptype = this.symbol_table.infer_type(exp)
         
         match exptype with
@@ -134,7 +133,6 @@ type LLVMCompiler =
             func.add_inst(call_inst)
             Novalue
           | LLstring -> //Array_t
-            ////this.newgid's most recent return the string we're printing?
             let strid = this.oldgid("str")
             let call_inst = Call(None,Void_t,[],"lambda7c_printstr",[(Pointer(Basic("i8")),dest)])
             func.add_inst(call_inst)
@@ -203,7 +201,7 @@ type LLVMCompiler =
         v_endifBB.Add(realabel1)
         func.add_inst(Br_uc(endif)) //currentBB terminated
         //False Case Block
-        let BB0 = newBasicBlock(label0, v_ifelse) /////should this be v_ifelse instead of v_true? i believe so
+        let BB0 = newBasicBlock(label0, v_ifelse) 
         func.addBB(BB0)
         let dest0 = this.compile_expr(fcase, func)
         let realabel0 = func.currentBBlabel() //must call before termination
@@ -320,9 +318,19 @@ type LLVMCompiler =
           match llvm_arg_type with
             | Userstruct(s) ->
               let gi = this.symbol_table.struct_ind.[fst kvPair.Key]
-              let alloc_reg = sprintf "%s_%d" (fst kvPair.Key) gi
-              let alloc_inst = Alloca(alloc_reg, Pointer(Userstruct(s)), None)
+              let field_reg = sprintf "%s_%d" (fst kvPair.Key) gi
+              let alloc_reg = this.newid(field_reg)
+              //get the argument from self
+              let struct_type = Userstruct(fun_identifier)
+              let pos = iterator
+              let struct_inst = Structfield(field_reg, struct_type, Register("_self"), Iconst(pos))
+              lambda_fun.add_inst(struct_inst)
+              //alloc, since it's a struct within a struct, double pointer
+              let alloc_inst = Alloca(alloc_reg, Pointer(Pointer(Userstruct(s))), None)
               lambda_fun.add_inst(alloc_inst)
+              //store, since it's a struct within a struct, double pointer
+              let store_inst = Store(Pointer(Pointer(Userstruct(s))),Register(field_reg),Register(alloc_reg),None)
+              lambda_fun.add_inst(store_inst)
               llvm_arg_type <- Pointer(Userstruct(s))
             | _ -> ()
           let (var_name,_) = kvPair.Key
@@ -383,7 +391,6 @@ type LLVMCompiler =
         let store_inst = Store(Pointer(Userstruct(fun_identifier)),Register(cast_reg),Register(fun_identifier),None)
         func.add_inst(store_inst)
         Register(fun_identifier)
-        //////////load the allocated struct in function application
      
       | Lbox(Define(Lbox(_,var), value)) | Lbox(TypedDefine(Lbox(_,var), value))
       | Lbox(Setq(Lbox(var), value)) ->
@@ -428,7 +435,6 @@ type LLVMCompiler =
           func.add_inst(allocainst)
         let storeinst = Store(desttype, expr_dest, Register(var_str), None)
         func.add_inst(storeinst)
-        /////////if var_str is a free variable, then return the expr_dest?
         if is_free_var then
           expr_dest 
         else 
@@ -516,7 +522,6 @@ type LLVMCompiler =
           match entry with
             | LambdaDef(t,g,f,_) ->
               match t with
-                //////////| LLfun(l,r) -> (l,r,Some(f),g)
                 | LLclosure(l,r,n) -> (l,r,Some(f),g,n)
                 | _ -> ([LLuntypable], LLuntypable, None, 0, "") //Should be unreachable...
             | SimpleDef(t,g,a) -> 
@@ -696,8 +701,6 @@ type LLVMCompiler =
     match ptype with
       | LLuntypable -> None //errors handled by typechecker
       | _ ->
-        ///////////////////this should be in sym_table.global_declarations
-        ///////////////////except target triple
         this.program.preamble <- sprintf "%s"
           "target triple = \"x86_64-pc-linux-gnu\""
         let gdecVec = Vec<LLVMdeclaration>()

@@ -12,7 +12,6 @@ let rec grounded_type = function
   | LLunknown | LLvar(_) | LLuntypable -> false
   | LList(t) -> grounded_type t
   | lltype.LLtuple(vs) -> List.forall grounded_type vs
-  //////////| LLfun(args,rtype) -> List.forall grounded_type (rtype::args)
   | LLclosure(args,rtype,_) -> List.forall grounded_type (rtype::args)
   | _ -> true
 
@@ -21,7 +20,6 @@ let numerical = function
   | _ -> false 
 
 let funtype = function
-  /////////| LLfun(_) 
   | LLclosure(_) -> true
   | _ -> false
 
@@ -207,7 +205,6 @@ type SymbolTable =  // wrapping structure for symbol table frames
             | SimpleDef(lt,gi,_) -> gindex <- gi; lt 
             | LambdaDef(lt,gi,_,_) -> gindex <- gi; lt
         match t with
-          ///////////| LLfun(_) -> () //skip functions
           | LLclosure(_) -> () //skip functions
           | _ -> fvs.Add((x,gindex), t); ()
 
@@ -299,10 +296,7 @@ type SymbolTable =  // wrapping structure for symbol table frames
           iterator <- iterator + 1
         
         if not(error) then
-          ///let llist = Seq.toList llvec
-          ///let expected_type = LLfun(llist, rt)
           let llist = Seq.toList llvec
-          ///////////////////////should I add the index to the identifier???
           let mutable c_name = ""
           if not(this.struct_ind.ContainsKey(identifier)) then
             c_name <- sprintf "%s_%d" identifier this.global_index
@@ -319,7 +313,6 @@ type SymbolTable =  // wrapping structure for symbol table frames
           else 
             let etype = this.infer_type(e)
             if rt=etype || (rt=LLunknown && grounded_type(etype)) then
-              ///let success = this.set_type(identifier, 0, LLfun(llist, etype)) 
               let success = this.set_type(identifier, 0, LLclosure(llist, etype, c_name)) 
               if not(success) then 0
               else this.global_index 
@@ -444,7 +437,6 @@ type SymbolTable =  // wrapping structure for symbol table frames
       | Lbox(Define(var,value)) ->
         let (_, identifier) = var.value
         match value.value with
-          ////////////if an element in l is a closure, check the exported func
           | TypedLambda(l,_,e) | Lambda(l,e) ->
             let rt = 
               match value.value with
@@ -472,10 +464,9 @@ type SymbolTable =  // wrapping structure for symbol table frames
                 | _ -> ()
               let i = this.add_entry(identifier, inferred_type, Some(expression.value), frame)
               //define should be able to overwrite previously defined entries
-              if i = 0 then /////should we allow destructive assignment?
+              if i = 0 then //destructive assignment 
                 this.overwrite_entry(identifier, inferred_type, Some(expression.value), frame) |> ignore
               let old_entry = this.get_entry(identifier, 0)
-              /////Do we need to update global index? like this.gi -= 1
               this.set_index(identifier, gi) |> ignore
               //printfn "(%d,%d) TEST: INFERRED TYPE %A FOR VARIABLE %s"
                 //expression.line expression.column (this.get_type(identifier, 0)) identifier
@@ -531,7 +522,6 @@ type SymbolTable =  // wrapping structure for symbol table frames
                 LLuntypable
       | Lbox(Let(var_tupl, value, e)) | Lbox(TypedLet(var_tupl, value, e)) -> 
         let (t, identifier) = var_tupl.value
-        /////should lambda be allowed for let expressions
         match value.value with
           | Lambda(l,e) | TypedLambda(l,_,e) ->
             LLuntypable
@@ -674,7 +664,7 @@ type SymbolTable =  // wrapping structure for symbol table frames
           //printfn "(%d,%d) TEST: INFERRED TYPE %A FOR Sequence"
             //expression.line expression.column setype 
           setype
-      | Lbox(Setq(var,value)) -> /////should this return LLunit?
+      | Lbox(Setq(var,value)) -> 
         let vartype = this.get_type(var.value,0)
         if not(grounded_type(vartype)) then
           printfn "(%d,%d): TYPE ERROR: Undeclared variable %s must be initialized before assignment"
@@ -707,7 +697,7 @@ type SymbolTable =  // wrapping structure for symbol table frames
               printfn "(%d,%d): TYPE ERROR: All values in a vector must be of the same type. Types %A and %A were passed"
                 vl.[0].line vl.[0].column etype itype
               LLuntypable
-            else LList(etype) ///////originally etype?
+            else LList(etype) 
         else LList(etype)
       | Lbox(VectorSetq(v,i,e)) ->
         let (itype,vtype,etype) = (this.infer_type(i), this.infer_type(v), this.infer_type(e))
