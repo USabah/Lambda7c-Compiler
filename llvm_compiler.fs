@@ -215,11 +215,14 @@ type LLVMCompiler =
         let newBB = newBasicBlock(endif, v_endifBB)
         func.addBB(newBB)
         //check type of true branch (same as false branch)
-        let desttype = this.translate_type(this.symbol_table.infer_type(tcase))
+        let mutable desttype = this.translate_type(this.symbol_table.infer_type(tcase))
         match desttype with
           | Void_t -> Novalue
           | _ -> 
             let fdest = this.newid("r")
+            match desttype with
+              | Userstruct(s) -> desttype <- Pointer(Userstruct(s))
+              | _ -> ()
             let phiinst = Phi2(fdest,desttype,dest1,realabel1,dest0,realabel0)
             func.add_inst(phiinst)
             Register(fdest)
@@ -343,6 +346,7 @@ type LLVMCompiler =
         let reg = this.compile_expr(exp, lambda_fun)
         //restore original frame
         this.symbol_table.current_frame <- orig_frame
+        printfn "RETURN TYPE %A" r_type
         let ret = Ret(r_type, reg) 
         lambda_fun.add_inst(ret)
         this.program.functions.Add(lambda_fun)
@@ -418,17 +422,12 @@ type LLVMCompiler =
             | SimpleDef(l,g,_) | LambdaDef(l,g,_,_) -> (l,g)
         //if identifier is a free variable, then we need to get it from the struct
         let var_str = sprintf "%s_%d" identifier gindex
-        let mutable is_free_var = false
         if not(this.symbol_table.current_frame.entries.ContainsKey(identifier)) then
-          is_free_var <- true
           let fun_name = this.symbol_table.current_frame.name
           let (pos, ltype) = (snd this.symbol_table.clsmaps.[fun_name]).[var]
           
           let fun_identifier = sprintf "%s_%d" fun_name (this.symbol_table.struct_ind.[fun_name])
           let mutable struct_type = Userstruct(fun_identifier)
-          (*if this.symbol_table.struct_ind.ContainsKey(var) then  
-            struct_type <- Pointer(Userstruct(fun_identifier))
-          *)
           let struct_inst = Structfield(var_str, struct_type, Register("_self"), Iconst(pos))
           func.add_inst(struct_inst)
         let expr_dest = this.compile_expr(value, func)
@@ -448,12 +447,11 @@ type LLVMCompiler =
           this.allocated_vars.Add(var_str) |> ignore
           let allocainst = Alloca(var_str, desttype, None)
           func.add_inst(allocainst)
+        printfn "6: STORING REGISTER %A IN %A" expr_dest var_str
+        printfn "DESTTYPE: %A" desttype
         let storeinst = Store(desttype, expr_dest, Register(var_str), None)
         func.add_inst(storeinst)
-        if is_free_var then
-          expr_dest 
-        else 
-          Register(var_str)
+        expr_dest
       | Lbox(Var(var)) ->
         //printfn "IN VAR: %s" var
         if this.symbol_table.current_frame.entries.ContainsKey(var) then
@@ -487,9 +485,6 @@ type LLVMCompiler =
           
           let fun_identifier = sprintf "%s_%d" fun_name (this.symbol_table.struct_ind.[fun_name])
           let mutable struct_type = Userstruct(fun_identifier)
-          (*if this.symbol_table.struct_ind.ContainsKey(var) then  
-            struct_type <- Pointer(Userstruct(fun_identifier))
-          *)
           let struct_inst = Structfield(reg_name, struct_type, Register("_self"), Iconst(pos))
           func.add_inst(struct_inst)
           let mutable load_type = this.translate_type(ltype)

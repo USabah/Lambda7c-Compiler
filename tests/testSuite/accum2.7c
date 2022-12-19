@@ -1,0 +1,41 @@
+// closures
+
+(define make_accum (lambda (x:int) (begin
+  (define a x)
+  (define f (lambda (y:int):int (begin (setq a (+ a y)) a)))
+  (f)  
+)))
+
+(define ac1 (make_accum 0))
+(define ac2 (make_accum 0))
+(ac1 2)
+(ac1 3)
+(display (ac1 2))
+(display (ac2 2))
+(display (ac2 2))
+(define ac3 (if (= (getint) 1) ac1 ac2))
+(display (ac3 1))
+(free ac1)
+(free ac2)
+
+
+/*
+define make_accum = lambda x:int . {
+  define a = x;
+  define f = int lambda y:int . { a=a+y; a; }
+  f;
+}
+
+define ac1 = make_accum(0);
+define ac2 = make_accum(0);
+ac1(2);
+ac1(3);
+print(ac1(2));
+print(ac2(2));
+print(ac2(2));
+define ac3 = if (getint()==1) then ac1 else ac2;
+print(ac3(1));
+
+free(ac1);
+free(ac2);
+*/

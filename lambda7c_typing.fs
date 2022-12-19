@@ -327,19 +327,20 @@ type SymbolTable =  // wrapping structure for symbol table frames
 
 
   member this.infer_type (expression:LBox<expr>) = 
-    (*let trace = 
-      match expression with
-        | Lbox(Define(_)) -> "Define"
-        | Lbox(TypedDefine(_)) -> "TypedDefine"
-        | Lbox(Var(_)) -> "Var"
-        | Lbox(TypedVar(_)) -> "TypedVar"
-        | Lbox(Lambda(_)) | Lbox(TypedLambda(_)) -> "Lambda/Typed"
-        | Lbox(Let(_)) -> "Let"
-        | Lbox(TypedLet(_)) -> "TypedLet"
-        | Lbox(Sequence(_)) | Lbox(Beginseq(_)) -> sprintf "Sequence/Begin :: %A" expression
-        | _ -> sprintf "OTHER::: %A" expression
-    printfn "%s" trace
-    *)
+    if TRACE then
+      let trace = 
+        match expression with
+          | Lbox(Define(_)) -> "Define"
+          | Lbox(TypedDefine(_)) -> "TypedDefine"
+          | Lbox(Var(_)) -> "Var"
+          | Lbox(TypedVar(_)) -> "TypedVar"
+          | Lbox(Lambda(_)) | Lbox(TypedLambda(_)) -> "Lambda/Typed"
+          | Lbox(Let(_)) -> "Let"
+          | Lbox(TypedLet(_)) -> "TypedLet"
+          | Lbox(Sequence(_)) | Lbox(Beginseq(_)) -> sprintf "Sequence/Begin :: %A" expression
+          | _ -> sprintf "OTHER: %A" expression
+      printfn "%s" trace
+    
     //let (|Lbox|) (t:Stackitem<'AT>) =  Lbox(t.value);
     match expression with 
       | Lbox(Integer(_)) -> LLint
@@ -471,7 +472,18 @@ type SymbolTable =  // wrapping structure for symbol table frames
                 l.[0].line l.[0].column etype itype
               LLuntypable
             else 
-              LLarray(etype, size)
+              let vtype = LLarray(etype, size) 
+              let i = this.add_entry(var, vtype, Some(expression.value))
+              if i = 0 then
+                let entry_type = this.get_type(var,0)
+                if entry_type = vtype then
+                  this.overwrite_entry(var, vtype, Some(expression.value)) |> ignore
+                  vtype
+                else
+                  printfn "(%d,%d): TYPE ERROR: Cannot overwrite variable %s which has type %A with type %A"
+                    expression.line expression.column var entry_type vtype
+                  LLuntypable
+              else vtype
         else
           printfn "(%d,%d): TYPE ERROR: Vector cannot be defined with size 0." 
             expression.line expression.column
