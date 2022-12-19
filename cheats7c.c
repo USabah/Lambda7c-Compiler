@@ -33,3 +33,11 @@ void lambda7c_printstr(char* x) {
 void lambda7c_newline() {
   printf("\n");
 }
+void check_index(int index, int size, int line) {
+  if (index<0 || index>=size) {
+    printf("Array index out of bounds, program aborted");
+    if (line>=0)
+      printf("Error likely originated on line %d of the source code",line);
+    exit(139); // 139 is supposed to be Segmentation Fault
+  }
+}
