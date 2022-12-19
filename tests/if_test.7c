@@ -1,0 +1,4 @@
+(define a (not 1))
+(display a)
+(display "\n")
+(if (a) (display "true") (display "false"))

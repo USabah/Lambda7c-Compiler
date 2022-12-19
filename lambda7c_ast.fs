@@ -47,7 +47,7 @@ and lltype =  // abstract syntax for type expressions
   | LLint | LLfloat | LLstring
   | LList of lltype | LLtuple of lltype list
   | LLfun of (lltype list)*lltype
-  | LLclosure of (lltype list)*string
+  | LLclosure of (lltype list)*lltype*string
   | LLunknown | LLuntypable | LLvar of string | LLunit
 
 
@@ -207,7 +207,7 @@ Gmr.production("Txpr --> LBRACE Txpr RBRACE", fun rhs ->
 
 Gmr.production("Txpr --> LBRACK VAR RBRACK", fun rhs ->
   match rhs.[1].value with
-    | Var(s) -> TypeExpr(LLclosure([],s))
+    | Var(s) -> TypeExpr(LLclosure([],LLunknown,s))
     | _ -> Error
 )
 Gmr.production("Typeopt --> COLON Txpr", fun r -> r.[1].value)
@@ -285,7 +285,6 @@ Gmr.production("Expr --> setq VAR Axpr ", semact8)
 //#Sequences
 
 let semact9 (rhs:Vec<Stackitem<expr>>) =  
-  printfn "REACHED"
   match (rhs.[1].value, rhs.[2].value) with
     | (a, Nil) -> let box = rhs.[1].tolbox(a) in Beginseq(box::[])
     | (a, Sequence(b)) -> let box = rhs.[1].tolbox(a) in Beginseq(box::b)

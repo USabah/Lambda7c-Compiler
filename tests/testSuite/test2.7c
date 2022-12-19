@@ -1,4 +1,5 @@
 // testing let expressions
+/*
 define x = 1;
 define f = int lambda y:int . x+y;
 let x = 4 in {
@@ -7,14 +8,14 @@ let x = 4 in {
 }
 print(x);
 print("\n"); // correct output is 341
+*/
 
-/*
 (define x 1)
-(define f (lambda (y:yint):int (+ x y)))
+(define f (lambda (y:int):int (+ x y)))
 (let (x 4) (begin
   (display (f 2))
   (display x)
 ))
 (display x)
 (display "\n")
-*/
+

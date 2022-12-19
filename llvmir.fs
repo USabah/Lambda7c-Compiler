@@ -74,7 +74,7 @@ let rec type_string(t:LLVMtype) =
     | Basic(s) -> s
     | Pointer(t) -> type_string(t) + "*"
     | Array_t(i,t) -> "[" + string(i) + " x "+ type_string(t) + "]"
-    | Userstruct(s) -> s /////double check this one
+    | Userstruct(s) -> "%" + "struct." + s /////double check this one
     | Ellipsis -> "..."
     | Void_t -> "void"
 
@@ -179,10 +179,8 @@ let structlist_string(vec:Vec<LLVMtype>) =
     str <- str + t_str
     if i <> last_index then
       str <- str + ", "
-    else str <- str + " }"
     i <- i + 1
-  str
-
+  str + " }"
 
 type Instruction =  
   // terminator instructions that ends a Basic Block:
@@ -282,7 +280,7 @@ type Instruction =
         str
       | Structfield(reg, t, expr1, expr2) ->
         let t_str = type_string(t)
-        str <- "%" + reg + " = getelementptr inbounds %" + t_str + ", %" + t_str + "* " + expr_string(expr1) + " i32 0, i32 " + expr_string(expr2)
+        str <- "%" + reg + " = getelementptr inbounds " + t_str + ", " + t_str + "* " + expr_string(expr1) + ", i32 0, i32 " + expr_string(expr2)
         str
       | BBlock(label) -> label + ":"
       | Verbatim(s) -> s
@@ -367,7 +365,7 @@ it does not extract the value, which must be done with 'load'.
 
 The other form of getelementptr encoded as an Instruction is
 
-  %r2=getelementptr inbounds %bigstruct, %bigstruct* %r1 i32 0, i32 1
+  %r2=getelementptr inbounds %struct.bigstruct, %struct.bigstruct* %r1 i32 0, i32 1
 
 This is encoded as
 
@@ -510,6 +508,10 @@ let oprep(expression:LBox<expr>, isfloat:bool) =
         | ">=" -> if isfloat then "oge" else "sge" 
         | "and" when not(isfloat) -> "and" 
         | "or" when not(isfloat) -> "or" 
+        | _ -> "INVALID OP"
+    | Lbox(Uniop(op,_)) ->
+      match op with
+        | "not" | "~" -> if isfloat then "fneg" else "INVALID OP"
         | _ -> "INVALID OP"
     | _ -> "INVALID OP"
 
