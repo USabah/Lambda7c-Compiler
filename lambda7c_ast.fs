@@ -75,7 +75,7 @@ Gmr.lexterminal("RBRACK",">")
 Gmr.lexterminal("LBRACKEQ","<=") 
 Gmr.lexterminal("RBRACKEQ",">=") 
 //Gmr.nonterminals(["Expr";"Seq";"Binop";"Uniop";"Axpr";"Axprplus";"Typeopt";"Txpr";"VarTypeopt";"Strlist";"Sval";"Seq"]);  // these are in addition to AxprList
-Gmr.nonterminals(["Expr";"Seq";"Binop";"Uniop";"Axpr";"AxprList";"Typeopt";"Txpr";"VarTypeopt";"Strlist";"Sval";"Seq"]);  // these are in addition to AxprList
+Gmr.nonterminals(["Expr";"Seq";"Binop";"Uniop";"Axpr";"AxprList";"Typeopt";"Txpr";"Sizeopt";"VarTypeopt";"Strlist";"Sval";"Seq"]);  // these are in addition to AxprList
 
 let semact1 (rhs:Vec<Stackitem<expr>>) =  
   match (rhs.[0].value, rhs.[1].value) with
@@ -190,11 +190,16 @@ Gmr.production("Txpr --> int", fun r -> TypeExpr(LLint))
 Gmr.production("Txpr --> unit", fun r -> TypeExpr(LLunit))
 Gmr.production("Txpr --> float", fun r -> TypeExpr(LLfloat))
 Gmr.production("Txpr --> string", fun r -> TypeExpr(LLstring))
-Gmr.production("Txpr --> LBRACE Txpr RBRACE", fun rhs -> 
+
+//Txpr --> LBRACE Txpr Sizeopt RBRACE
+Gmr.production("Txpr --> LBRACE Txpr Sizeopt RBRACE", fun rhs -> 
   match rhs.[1].value with
     | TypeExpr(t) -> TypeExpr(LList(t))
     | _ -> Error
 )
+
+Gmr.production("Sizeopt --> INT", fun rhs -> rhs.[0].value)
+Gmr.production("Sizeopt --> ", fun rhs -> Integer(0))
 
 Gmr.production("Txpr --> LBRACK VAR RBRACK", fun rhs ->
   match rhs.[1].value with
