@@ -1,4 +1,4 @@
-============================LAMBDA7C COMPILER============================
+**============================LAMBDA7C COMPILER============================**
 
 Lambda7c is a programming language built using fsharp by Uriya Sabah with 
 the purpose of learning about each stage of compilation and the minute 
@@ -10,67 +10,67 @@ it makes use of functions in C's library which allows it to function as a
 basic, yet intuitive programming language. 
 
 
-================================HOW TO RUN===============================
+**================================HOW TO RUN===============================**
 
 You can run Lambda7c using the following commands:
 
 First, download the directory from the zip on GitHub or run 
-  git clone https://github.com/USabah/Lambda7c-Compiler.git
+  ```git clone https://github.com/USabah/Lambda7c-Compiler.git```
 
 Then, (optionally) compile the source code by executing the compilation 
 script:
-  bash full_compile.exe
+  ```bash full_compile.exe```
 
 Next, you can create a script file (optionally labeled as a .7c file,
 see the tests directory for some sample programs!) and run it using
-  mono lambda7c_main.exe YOUR/FILE/PATH
+  ```mono lambda7c_main.exe YOUR/FILE/PATH```
 
 Or you can input an expression interactively by running
-  mono lambda7c_main.exe
+  ```mono lambda7c_main.exe```
 
 You can also optionally pass the -generate and/or -trace flags 
 to re-generate the parsing table, or trace the compilation as its
 completed. 
 
-The last stage will create an output file (output.ll) which can be
+The last stage will create an output file (```output.ll```) which can be
 compiled with:
-  clang output.ll cheats7c.o
+  ```clang output.ll cheats7c.o```
 
 and ran with:
-  ./a.out
+  ```./a.out```
 
-==============================ORGANIZATION===============================
+**==============================ORGANIZATION===============================**
 
 Listed below are the relevant files to the compilation of lambda7c code:
 
-lambda7c_main.fs: The runner of the system. Takes input from the user via
+```lambda7c_main.fs```: The runner of the system. Takes input from the user via
 file or command line, and runs the parser, type checker, and compiler. 
 It will then generate an output.ll file with the program compiled to LLVM. 
 
-output.ll: Destination of the LLVM compiled program.
+```output.ll```: Destination of the LLVM compiled program.
 
-recless.fs: Defines the parser functions and classes. Parses the input 
-using LL(1) Grammar production rules, which are defined in Lamecbda7c_ast.fs. 
+```recless.fs```: Defines the parser functions and classes. Parses the input 
+using LL(1) Grammar production rules, which are defined in ```Lambda7c_ast.fs```. 
 
-lambda7c_ast.fs: Defines the LL(1) Grammar rules to produce the abstract
+```lambda7c_ast.fs```: Defines the LL(1) Grammar rules to produce the abstract
 syntax tree of the language, which can then be used to type check and compile
 the programs.
 
-lamdba7c_typing.fs: The type checker of the compiler. Recursively infers the
+```lamdba7c_typing.fs```: The type checker of the compiler. Recursively infers the
 type of each expression in the abstract syntax tree to determine whether the
 program is type safe. Defines the symbol table which contains information
 about each table frame and the table entries within them.
 
-llvmir.fs: Defines the simplified abstract representation of LLVM IR. This
+```llvmir.fs```: Defines the simplified abstract representation of LLVM IR. This
 also includes the to_string method(s) which converts the representation to
 LLVM code. Contains the definition
 
-llvm_compiler.fs: Contains the definitions of the compiler, which converts the 
+```llvm_compiler.fs```: Contains the definitions of the compiler, which converts the 
 abstract syntax tree of lambda7c to the abstract syntax of LLVM, which is
-converted to string format in llvmir.fs. 
+converted to string format in ```llvmir.fs```. 
 
 
-================================FEATURES=================================
+**================================FEATURES=================================**
 
 Lambda7c currently supports the following operations:
 
@@ -116,6 +116,5 @@ Closure Definitions must be exported globally using
 
 Expressions can be evaluated to Int, Float, String, Closures, or Arrays
 
-=========================================================================
-
-See the tests directory for some sample programs to compile!
+**=========================================================================**
+***See the tests directory for some sample programs to compile!***
